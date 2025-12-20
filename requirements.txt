@@ -1,0 +1,9 @@
+streamlit
+google-generativeai
+requests
+pandas
+python-dotenv
+scikit-learn
+joblib
+beautifulsoup4
+playwright>=1.40.0
