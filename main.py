@@ -350,10 +350,12 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             try:
                 transmission = "Automatic" if "auto" in variant.lower() or "amt" in variant.lower() or "cvt" in variant.lower() else "Manual"
                 cars24_price, cars24_debug = get_cars24_price(make, model, year, variant, fuel, transmission, km, location)
+            except Exception as e:
+                cars24_debug = f"Error: {str(e)}"
         elif not CARS24_SUPPORTED:
             cars24_debug = "Cars24 engine (Playwright) is not supported in this environment."
         
-      # --- CONSENSUS CALCULATION (Robust IQR Method) ---
+    # --- CONSENSUS CALCULATION (Robust IQR Method) ---
     engine_results = {
         "Logic": logic_price,
         "Scout": scout_price,
