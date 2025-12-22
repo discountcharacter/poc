@@ -43,7 +43,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.0.7"
+VERSION = "Rescue-v1.0.8"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
@@ -339,8 +339,9 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         ensemble_predictor = get_ensemble_predictor()
         # Map our local data to what the predictor expects
         car_info = {
-            'year': year, 'km_driven': km, 'fuel': fuel, 
-            'make': make, 'model': model, 'city': location
+            'year': year, 'km': km, 'km_driven': km, 'fuel': fuel, 
+            'make': make, 'model': model, 'city': location,
+            'variant': variant, 'transmission': "Manual" # Default fallback
         }
         ensemble_result = ensemble_predictor.predict(car_info, smart_market_data)
         ensemble_price = int(ensemble_result['final_price'] * 100000)

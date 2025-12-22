@@ -30,6 +30,7 @@ class EnsemblePricePredictor:
     3. Validation Layer (Reject absurd predictions)
     4. Fallback Logic
     """
+    VERSION = "Rescue-v1.0.8"
     
     def __init__(self, models_path: str = "models/ensemble"):
         self.models_path = models_path
@@ -97,43 +98,31 @@ class EnsemblePricePredictor:
                     df[col] = -1
         
         # 5. Select Final Features (Must match exactly)
-        # For prediction, we enforce the architecture's expected features
-        # This bypasses any stale features.pkl from older training runs
-        arch_features = ['age', 'age_squared', 'km', 'km_per_year'] + cat_cols
+        # ARCHITECTURE DEFINITION: This is the ONLY source of truth for features.
+        target_features = ['age', 'age_squared', 'km', 'km_per_year', 'make', 'model', 'fuel', 'transmission', 'city', 'variant']
         
-        if is_training:
-            self.features = arch_features
-        
-        # Guard: Rebuild features if missing or mismatch (forcing architecture consistency)
-        target_features = arch_features
-        
-        # Explicitly ensure columns exist in df before reindexing
+        # 6. Final Stand: Manual Padding
+        # This ensures every single expected column exists before we even touch reindex or indexers
         for col in target_features:
             if col not in df.columns:
-                if col in cat_cols:
-                    df[col] = "unknown"
+                if col in ['make', 'model', 'fuel', 'transmission', 'city', 'variant']:
+                    df[col] = -1 if not is_training else "unknown" # Ensure types match what encoders expect
                 else:
-                    df[col] = 0
+                    df[col] = 0.0
                     
-        # Debug print for server logs (visible in Streamlit 'Manage App')
-        print(f"DEBUG [prepare_features]: Input columns: {list(df.columns)}")
-        print(f"DEBUG [prepare_features]: Target columns: {target_features}")
-            
-        # Final Guard: Ensure DF has all expected columns
-        df = df.reindex(columns=target_features, fill_value=0)
+        # Debug trace for server logs
+        print(f"[{self.VERSION}] prepare_features: Finalizing alignment for {target_features}")
         
-        # Double check for NaN
-        df = df.fillna(0)
-        
-        # Verify columns match target_features exactly
-        missing = [c for c in target_features if c not in df.columns]
-        if missing:
-            print(f"ALERT: Features still missing after reindex: {missing}")
-            for c in missing:
-                df[c] = 0
-                
-        # Final return - this cannot throw KeyError now
-        return df[target_features], target_features
+        # 7. Safe Selection
+        # Use reindex to force order and filter any ghosts
+        try:
+            df = df.reindex(columns=target_features, fill_value=0)
+            df = df.fillna(0)
+            return df[target_features], target_features
+        except Exception as e:
+            print(f"[{self.VERSION}] FATAL: Safe selection failed: {e}")
+            # Absolute fallback: return just the values in correct order
+            return df[target_features], target_features
 
     def train(self, df: pd.DataFrame):
         """
