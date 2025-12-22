@@ -65,19 +65,26 @@ class EnsemblePricePredictor:
             df['age'] = 5
             df['age_squared'] = 25
             
-        # 3. KM Metrics
-        km_col = 'km' if 'km' in df.columns else 'km_driven'
-        if km_col in df.columns:
-            df['km_per_year'] = df[km_col] / (df['age'] + 1)
+        # 3. KM Metrics (Standardize to 'km')
+        if 'km_driven' in df.columns and 'km' not in df.columns:
+            df['km'] = df['km_driven']
+        
+        if 'km' in df.columns:
+            df['km_per_year'] = df['km'] / (df['age'] + 1)
         else:
+            df['km'] = 50000
             df['km_per_year'] = 10000
             
         # 4. Categorical Encoding
         cat_cols = ['make', 'model', 'fuel', 'transmission', 'city', 'variant']
-        available_cat = [c for c in cat_cols if c in df.columns]
+        available_cat = [c for c in cat_cols if c in df.columns or not is_training]
         
-        for col in available_cat:
+        for col in cat_cols:
+            if col not in df.columns:
+                df[col] = "unknown" # Ensure column exists
+                
             df[col] = df[col].astype(str).str.lower().str.strip()
+            
             if is_training:
                 le = LabelEncoder()
                 df[col] = le.fit_transform(df[col])
@@ -91,9 +98,15 @@ class EnsemblePricePredictor:
         
         # 5. Select Final Features (Must match exactly)
         if is_training:
-            self.features = ['age', 'age_squared', km_col, 'km_per_year'] + available_cat
+            self.features = ['age', 'age_squared', 'km', 'km_per_year'] + cat_cols
         
-        # Fill missing
+        # Fill missing features for prediction
+        if not is_training:
+            for f in self.features:
+                if f not in df.columns:
+                    df[f] = 0
+        
+        # Fill NaN
         df = df.fillna(0)
         
         return df[self.features], self.features
