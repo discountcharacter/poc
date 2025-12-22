@@ -350,49 +350,87 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             try:
                 transmission = "Automatic" if "auto" in variant.lower() or "amt" in variant.lower() or "cvt" in variant.lower() else "Manual"
                 cars24_price, cars24_debug = get_cars24_price(make, model, year, variant, fuel, transmission, km, location)
-            except Exception as e:
-                cars24_debug = f"Error: {str(e)}"
         elif not CARS24_SUPPORTED:
             cars24_debug = "Cars24 engine (Playwright) is not supported in this environment."
         
-        # Weighted Final Price
-        # Logic: We give Ensemble ML (Engine H) the highest weight if available, 
-        # as it combines both ML and Smart Market Data.
-        prices = [p for p in [logic_price, scout_price, oracle_price, sniper_price, ml_price, cars24_price, smart_market_price, ensemble_price] if p and p > 0]
-        
-        if ensemble_price and ensemble_price > 0:
-            # If ensemble is available, give it 50% weight, others split the rest
-            avg_others = statistics.mean([p for p in prices if p != ensemble_price]) if len(prices) > 1 else ensemble_price
-            final_price = int(ensemble_price * 0.6 + avg_others * 0.4)
-        elif prices:
-             final_price = int(statistics.mean(prices))
+      # --- CONSENSUS CALCULATION (Robust IQR Method) ---
+    engine_results = {
+        "Logic": logic_price,
+        "Scout": scout_price,
+        "Oracle": oracle_price,
+        "Ensemble": ensemble_result.get('final_price', 0), # Use ensemble_result here
+        "Scraper": smart_market_data['statistics']['median'] if smart_market_data.get('success') else 0, # Use smart_market_data here
+        "Sniper": sniper_price,
+        "ML Prediction": ml_price,
+        "Cars24": cars24_price # Use cars24_price here
+    }
+    
+    # Filter valid non-zero results
+    valid_results = {k: v for k, v in engine_results.items() if v and v > 0} # Ensure v is not None and > 0
+    
+    if not valid_results:
+        final_price = 0
+    else:
+        prices = list(valid_results.values())
+        if len(prices) >= 4:
+            # IQR Outlier Removal
+            q1, q3 = np.percentile(prices, [25, 75])
+            iqr = q3 - q1
+            lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+            filtered_prices = [p for p in prices if lower <= p <= upper]
+            # If everything is filtered (shouldn't happen), fallback to original list
+            if not filtered_prices: filtered_prices = prices
         else:
-            final_price = 0
+            filtered_prices = prices
             
-    # --- Display ---
-    
+        # Weighted Final Price
+        # Priorities: Ensemble (40%), Scraper (30%), Logic/Oracle/Sniper (10% each)
+        weights = {
+            "Ensemble": 0.40,
+            "Scraper": 0.30,
+            "Logic": 0.10,
+            "Oracle": 0.10,
+            "Sniper": 0.10,
+            "Scout": 0.05, # Added default weights for other engines
+            "ML Prediction": 0.05,
+            "Cars24": 0.05
+        }
+        
+        weighted_sum = 0
+        total_weight = 0
+        
+        for name, price in valid_results.items():
+            if price in filtered_prices:
+                w = weights.get(name, 0.05) # Default weight for others
+                weighted_sum += price * w
+                total_weight += w
+        
+        final_price = weighted_sum / total_weight if total_weight > 0 else np.median(filtered_prices)
+
+    # 4. Display Consensus
     st.markdown("---")
+    st.subheader("🏁 Final Valuation Consensus")
     
-    # Hero Card
+    col_f1, col_f2 = st.columns([1, 1])
+    with col_f1:
+        st.metric("Fair Market Value", f"₹ {format_currency(final_price)}", delta=f"{len(valid_results)} Engines Contributing")
+    with col_f2:
+        conf_score = "High" if len(filtered_prices) >= 5 else "Medium"
+        st.info(f"Consensus Confidence: **{conf_score}** (IQR filtered {len(prices) - len(filtered_prices)} outliers)")
+
+    # Consolidate Breakdown for Graph
+    graph_data = pd.DataFrame({
+        "Engine": list(valid_results.keys()),
+        "Price (Lakhs)": [v / 100000 for v in list(valid_results.values())], # Convert to Lakhs for graph
+        "Status": ["Included" if v in filtered_prices else "Outlier" for v in valid_results.values()]
+    })
+    st.bar_chart(graph_data, x="Engine", y="Price (Lakhs)", color="Status")
+    
+    # Hero Card (moved here to be after final_price calculation)
     c_main, c_hero = st.columns([1, 2])
     with c_main:
-        st.markdown(f"""
-        <div style="text-align: left;">
-            <div style="font-size: 1.2rem; color: #64748B; margin-bottom: 0.5rem;">Fair Market Value • {location.lower()}</div>
-            <div style="font-size: 3.5rem; font-weight: 800; color: #2563EB; line-height: 1.1;">
-                {format_currency(final_price)}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Display links for both sources
-        if carwale_url or spinny_url:
-            st.markdown("<div style='margin-top: 10px;'>", unsafe_allow_html=True)
-            if carwale_url:
-                st.markdown(f'<a href="{carwale_url}" target="_blank" style="text-decoration: none;"><div style="background: #ecfdf5; color: #059669; padding: 10px; border-radius: 8px; border: 1px solid #10b981; font-weight: 600; text-align: center; margin-bottom: 8px;">🚗 View on CarWale</div></a>', unsafe_allow_html=True)
-            if spinny_url:
-                st.markdown(f'<a href="{spinny_url}" target="_blank" style="text-decoration: none;"><div style="background: #fef3c7; color: #d97706; padding: 10px; border-radius: 8px; border: 1px solid #f59e0b; font-weight: 600; text-align: center;">🔄 View on Spinny</div></a>', unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+        # This section is now redundant as the main metric is displayed above
+        pass
              
     # Breakdown Grid - 8 engines (2 rows of 4)
     row1 = st.columns(4)

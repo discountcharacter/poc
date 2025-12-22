@@ -1,252 +1,165 @@
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urlencode
+from playwright.sync_api import sync_playwright
 import re
 import statistics
-from typing import List, Dict
 import time
+from typing import List, Dict
 
 class SmartCarScraper:
     """
-    Intelligent scraper that applies filters and extracts multiple listings
-    instead of just grabbing the first result.
+    Intelligent scraper using Playwright to bypass anti-bot measures.
+    Extracts multiple listings and applies statistical cleaning.
     """
     
-    def __init__(self):
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5'
-        }
+    def __init__(self, headless: bool = True):
+        self.headless = headless
         
-    def build_carwale_url(self, make: str, model: str, year: int, 
-                          fuel: str, city: str, max_km: int) -> str:
-        """Build filtered CarWale URL"""
+    def _get_page_content(self, url: str) -> str:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=self.headless)
+            page = browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            try:
+                page.goto(url, wait_until="networkidle", timeout=30000)
+                time.sleep(2) # Allow dynamic content
+                content = page.content()
+                browser.close()
+                return content
+            except Exception as e:
+                print(f"❌ Scraper error for {url}: {e}")
+                browser.close()
+                return ""
+
+    def scrape_carwale_listings(self, make: str, model: str, year: int, 
+                                city: str, max_results: int = 10) -> List[Dict]:
         city_slug = city.lower().replace(' ', '-')
-        base = f"https://www.carwale.com/used/cars-in-{city_slug}/"
-        
-        # CarWale uses slug patterns for filters often, or query params
-        params = {
-            'make': make.lower(),
-            'model': model.lower().replace(' ', '-'),
-            'yearFrom': year - 1,  # ±1 year tolerance
-            'yearTo': year + 1,
-            'fuelType': fuel.lower(),
-            'kmDriven': max_km + 15000  # tolerance
-        }
-        
-        return base + '?' + urlencode(params)
-    
-    def build_spinny_url(self, make: str, model: str, year: int, 
-                         fuel: str, city: str) -> str:
-        """Build filtered Spinny URL"""
         make_slug = make.lower().replace(' ', '-')
         model_slug = model.lower().replace(' ', '-')
-        city_slug = city.lower().replace(' ', '-')
+        url = f"https://www.carwale.com/used/{make_slug}-{model_slug}-cars-in-{city_slug}/"
         
-        return f"https://www.spinny.com/buy-used-{make_slug}-{model_slug}-cars-in-{city_slug}/?year={year}&fuel={fuel.lower()}"
-    
-    def scrape_carwale(self, url: str, max_results: int = 12) -> List[Dict]:
-        """
-        Scrape multiple listings from CarWale with exact filters applied
-        """
-        try:
-            response = requests.get(url, headers=self.headers, timeout=10)
-            if response.status_code != 200:
-                return []
-                
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
+        print(f"🔍 Scraping CarWale: {url}")
+        
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=self.headless)
+            page = browser.new_page(user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
             listings = []
-            # Updated selectors based on common CarWale structure
-            cards = soup.find_all('div', class_='used-card')[:max_results]
             
-            # Fallback for different class names
-            if not cards:
-                cards = soup.select('div[data-listing-id]')[:max_results]
-            
-            for card in cards:
-                try:
-                    text_content = card.get_text(" ", strip=True)
+            try:
+                page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_selector('[data-track-label="ListingCard"], .o-cpnuEd', timeout=10000)
+                
+                cards = page.query_selector_all('[data-track-label="ListingCard"], .o-cpnuEd')
+                for card in cards[:max_results]:
+                    text = card.inner_text()
                     
-                    # Extract price
-                    price = self._parse_price(text_content)
-                    if not price: continue
+                    # Parse price
+                    price_match = re.search(r'₹\s*([\d.]+)\s*Lakh', text, re.IGNORECASE)
+                    if not price_match: continue
+                    price = float(price_match.group(1))
                     
-                    # Extract KM
-                    km_match = re.search(r'(\d+(?:,\d+)*)\s*km', text_content, re.IGNORECASE)
+                    # Parse Year
+                    year_match = re.search(r'\b(20\d{2})\b', text)
+                    f_year = int(year_match.group(1)) if year_match else 0
+                    
+                    # Parse KM
+                    km_match = re.search(r'([\d,]+)\s*km', text, re.IGNORECASE)
                     km = int(km_match.group(1).replace(',', '')) if km_match else 0
                     
-                    # Extract year
-                    year_match = re.search(r'\b(20\d{2})\b', text_content)
-                    found_year = int(year_match.group(1)) if year_match else 0
-                    
-                    # Extract listing URL
-                    link_tag = card.find('a', href=True)
-                    link = link_tag['href'] if link_tag else ""
-                    if link and not link.startswith('http'):
-                        link = 'https://www.carwale.com' + link
+                    if f_year and abs(f_year - year) > 1: continue # Tolerance
                     
                     listings.append({
                         'source': 'CarWale',
                         'price': price,
+                        'year': f_year,
                         'km': km,
-                        'year': found_year,
-                        'url': link,
-                        'title': card.find('h3').text.strip() if card.find('h3') else "CarWale Listing"
+                        'title': text.split('\n')[0]
                     })
-                    
-                except Exception as e:
-                    continue
-            
+                browser.close()
+            except Exception as e:
+                print(f"⚠️ CarWale fail: {e}")
+                browser.close()
             return listings
-            
-        except Exception:
-            return []
-    
-    def scrape_spinny(self, url: str, max_results: int = 12) -> List[Dict]:
-        """
-        Scrape multiple listings from Spinny with filters
-        """
-        try:
-            response = requests.get(url, headers=self.headers, timeout=10)
-            if response.status_code != 200:
-                return []
-                
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
+
+    def scrape_spinny_listings(self, make: str, model: str, year: int,
+                               city: str, max_results: int = 10) -> List[Dict]:
+        make_s = make.lower().replace(' ', '-')
+        model_s = model.lower().replace(' ', '-')
+        city_s = city.lower().replace(' ', '-')
+        url = f"https://www.spinny.com/buy-used-{make_s}-{model_s}-cars-in-{city_s}/"
+        
+        print(f"🔍 Scraping Spinny: {url}")
+        
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=self.headless)
+            page = browser.new_page()
             listings = []
-            # Spinny listing cards
-            cards = soup.select('a[class*="styles_carCard"]')[:max_results]
-            if not cards:
-                cards = soup.find_all('div', {'data-testid': 'car-card'})[:max_results]
-            
-            for card in cards:
-                try:
-                    text_content = card.get_text(" ", strip=True)
+            try:
+                page.goto(url, wait_until="networkidle", timeout=20000)
+                cards = page.query_selector_all('[data-testid="car-card"], .car-card')
+                for card in cards[:max_results]:
+                    text = card.inner_text()
                     
-                    price = self._parse_price(text_content)
-                    if not price: continue
+                    price_m = re.search(r'₹\s*([\d.]+)\s*(?:Lakh|L)', text, re.IGNORECASE)
+                    if not price_m: continue
+                    price = float(price_m.group(1))
                     
-                    # Extract KM and Year from Spinny format
-                    km_match = re.search(r'(\d+(?:,\d+)*)\s*km', text_content, re.IGNORECASE)
-                    km = int(km_match.group(1).replace(',', '')) if km_match else 0
+                    year_m = re.search(r'\b(20\d{2})\b', text)
+                    f_year = int(year_m.group(1)) if year_m else 0
                     
-                    year_match = re.search(r'\b(20\d{2})\b', text_content)
-                    found_year = int(year_match.group(1)) if year_match else 0
+                    km_m = re.search(r'([\d,]+)\s*km', text, re.IGNORECASE)
+                    km = int(km_m.group(1).replace(',', '')) if km_m else 0
                     
-                    link = card['href'] if card.has_attr('href') else ""
-                    if link and not link.startswith('http'):
-                        link = 'https://www.spinny.com' + link
+                    if f_year and abs(f_year - year) > 1: continue
                     
                     listings.append({
                         'source': 'Spinny',
                         'price': price,
+                        'year': f_year,
                         'km': km,
-                        'year': found_year,
-                        'url': link,
-                        'title': text_content[:50] + "..."
+                        'title': text.split('\n')[0]
                     })
-                    
-                except Exception:
-                    continue
-            
+                browser.close()
+            except Exception as e:
+                print(f"⚠️ Spinny fail: {e}")
+                browser.close()
             return listings
-            
-        except Exception:
-            return []
-    
-    def _parse_price(self, text: str) -> float:
-        """Extract price in lakhs from mixed text"""
-        # Match ₹8.5 Lakh or ₹8,50,000
-        price_pattern = re.compile(r"(?:₹|Rs\.?)\s*(\d+(?:\.\d+)?)\s*(?:Lakh|Lakhs|L)?", re.IGNORECASE)
-        match = price_pattern.search(text)
-        if not match:
-            # Try plain number matches for larger values
-            full_num_match = re.search(r'(?:₹|Rs\.?)\s*(\d+(?:,\d+)*)', text)
-            if full_num_match:
-                val = float(full_num_match.group(1).replace(',', ''))
-                if val > 100000:
-                    return round(val / 100000, 2)
-            return 0.0
-            
-        val = float(match.group(1))
-        # If the number is small (e.g. 8.5), it's likely already in Lakhs
-        # If it's large (e.g. 850000), it's absolute
-        if val < 500:
-            return val
-        else:
-            return round(val / 100000, 2)
-    
+
     def get_market_data(self, make: str, model: str, year: int, 
                        fuel: str, city: str, km_driven: int) -> Dict:
-        """
-        Main function: Get 15-20 listings from multiple sources
-        """
         all_listings = []
+        all_listings.extend(self.scrape_carwale_listings(make, model, year, city))
+        all_listings.extend(self.scrape_spinny_listings(make, model, year, city))
         
-        # Scrape CarWale
-        carwale_url = self.build_carwale_url(make, model, year, fuel, city, km_driven)
-        carwale_listings = self.scrape_carwale(carwale_url)
-        all_listings.extend(carwale_listings)
+        # IQR Outlier filter
+        if not all_listings:
+            return {'success': False, 'message': 'No listings found', 'count': 0}
+            
+        prices = [l['price'] for l in all_listings]
+        if len(prices) >= 4:
+            q1, q3 = statistics.quantiles(prices, n=4)[0], statistics.quantiles(prices, n=4)[2]
+            iqr = q3 - q1
+            lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+            filtered = [l for l in all_listings if lower <= l['price'] <= upper]
+        else:
+            filtered = all_listings
+            
+        filtered.sort(key=lambda x: abs(x['km'] - km_driven))
         
-        # Scrape Spinny
-        spinny_url = self.build_spinny_url(make, model, year, fuel, city)
-        spinny_listings = self.scrape_spinny(spinny_url)
-        all_listings.extend(spinny_listings)
-        
-        # Clean and analyze data
-        cleaned = self._remove_outliers(all_listings, km_driven)
-        
-        if not cleaned:
-            return {
-                'success': False,
-                'message': 'No valid listings found',
-                'search_urls': [carwale_url, spinny_url]
-            }
-        
-        prices = [l['price'] for l in cleaned]
+        f_prices = [l['price'] for l in filtered]
         
         return {
             'success': True,
-            'count': len(cleaned),
-            'listings': cleaned,
+            'count': len(filtered),
+            'listings': filtered[:5],
             'statistics': {
-                'median': round(statistics.median(prices), 2),
-                'mean': round(statistics.mean(prices), 2),
-                'min': min(prices),
-                'max': max(prices),
-                'std_dev': round(statistics.stdev(prices), 2) if len(prices) > 1 else 0
-            },
-            'search_urls': [carwale_url, spinny_url]
+                'median': round(statistics.median(f_prices), 2),
+                'mean': round(statistics.mean(f_prices), 2),
+                'min': min(f_prices),
+                'max': max(f_prices)
+            }
         }
-    
-    def _remove_outliers(self, listings: List[Dict], target_km: int) -> List[Dict]:
-        """
-        Remove outliers and sort by relevance
-        """
-        if not listings:
-            return []
-        
-        # Basic filter: Year within range
-        # (Already handled by build_url but good for robustness)
-        
-        # Remove price outliers using IQR method
-        prices = [l['price'] for l in listings]
-        if len(prices) < 4:
-            return listings
-        
-        q1, q2, q3 = statistics.quantiles(prices, n=4)
-        iqr = q3 - q1
-        lower_bound = q1 - 1.5 * iqr
-        upper_bound = q3 + 1.5 * iqr
-        
-        cleaned = [l for l in listings if lower_bound <= l['price'] <= upper_bound]
-        
-        # Sort by KM proximity to target
-        cleaned.sort(key=lambda x: abs(x['km'] - target_km))
-        
-        return cleaned
+
+if __name__ == "__main__":
+    s = SmartCarScraper(headless=True)
+    print(s.get_market_data("Maruti", "Swift", 2020, "Petrol", "Mumbai", 35000))
 
 if __name__ == "__main__":
     scraper = SmartCarScraper()

@@ -4,7 +4,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.preprocessing import LabelEncoder
 import joblib
 import os
-from typing import Dict, Tuple
+from typing import Dict, List, Any
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -12,199 +12,221 @@ warnings.filterwarnings('ignore')
 # We import them here. In a real environment, they need to be installed.
 try:
     from xgboost import XGBRegressor
-    from lightgbm import LGBMRegressor
     XGB_AVAILABLE = True
 except ImportError:
     XGB_AVAILABLE = False
 
+try:
+    from lightgbm import LGBMRegressor
+    LGBM_AVAILABLE = True
+except ImportError:
+    LGBM_AVAILABLE = False
+
 class EnsemblePricePredictor:
     """
-    Combines ML models with live market data for robust predictions.
+    ENSEMBLE ML ENGINE (FIXED)
+    1. Unit Standardization (Force Lakhs)
+    2. Feature Engineering (Age, Age^2, KM/Year)
+    3. Validation Layer (Reject absurd predictions)
+    4. Fallback Logic
     """
     
-    def __init__(self):
-        self.rf_model = None
-        self.gb_model = None
-        self.xgb_model = None
-        self.lgbm_model = None
+    def __init__(self, models_path: str = "models/ensemble"):
+        self.models_path = models_path
+        self.models = {
+            'rf': None,
+            'gb': None,
+            'xgb': None,
+            'lgbm': None
+        }
         self.label_encoders = {}
-        self.models_path = "models/ensemble"
+        self.features = []
+        self.price_bounds = {'min': 0.5, 'max': 150.0}
         
     def _ensure_dir(self):
         if not os.path.exists(self.models_path):
-            os.makedirs(self.models_path)
-            
-    def train(self, df: pd.DataFrame):
+            os.makedirs(self.models_path, exist_ok=True)
+
+    def prepare_features(self, df: pd.DataFrame, is_training: bool = True) -> (pd.DataFrame, List[str]):
         """
-        Train ensemble on historical data.
+        Standardized feature engineering.
         """
-        self._ensure_dir()
-        print("🔧 Training ensemble models...")
-        
         df = df.copy()
         
-        # Categorical columns to encode
-        cat_cols = ['fuel', 'seller_type', 'transmission', 'owner', 'make', 'model', 'city', 'variant', 'source']
+        # 1. Clean column names
+        df.columns = [c.lower() for c in df.columns]
         
+        # 2. Derive Age
+        current_year = 2024
+        if 'year' in df.columns:
+            df['age'] = current_year - df['year']
+            df['age_squared'] = df['age'] ** 2
+        else:
+            df['age'] = 5
+            df['age_squared'] = 25
+            
+        # 3. KM Metrics
+        km_col = 'km' if 'km' in df.columns else 'km_driven'
+        if km_col in df.columns:
+            df['km_per_year'] = df[km_col] / (df['age'] + 1)
+        else:
+            df['km_per_year'] = 10000
+            
+        # 4. Categorical Encoding
+        cat_cols = ['make', 'model', 'fuel', 'transmission', 'city', 'variant']
+        available_cat = [c for c in cat_cols if c in df.columns]
+        
+        for col in available_cat:
+            df[col] = df[col].astype(str).str.lower().str.strip()
+            if is_training:
+                le = LabelEncoder()
+                df[col] = le.fit_transform(df[col])
+                self.label_encoders[col] = le
+            else:
+                le = self.label_encoders.get(col)
+                if le:
+                    df[col] = df[col].map(lambda x: le.transform([x])[0] if x in le.classes_ else -1)
+                else:
+                    df[col] = -1
+        
+        # 5. Select Final Features (Must match exactly)
+        if is_training:
+            self.features = ['age', 'age_squared', km_col, 'km_per_year'] + available_cat
+        
+        # Fill missing
+        df = df.fillna(0)
+        
+        return df[self.features], self.features
+
+    def train(self, df: pd.DataFrame):
+        """
+        Train with strict unit validation.
+        """
+        self._ensure_dir()
+        df = df.copy()
+        df.columns = [c.lower() for c in df.columns]
+        
+        # Unit Check
         target_col = None
-        for col in ['selling_price', 'price', 'Selling_Price']:
+        for col in ['price', 'selling_price']:
             if col in df.columns:
                 target_col = col
                 break
         
-        if target_col is None:
-            print("❌ No target variable found.")
+        if not target_col:
+            print("❌ No target price column found.")
             return
-
-        y = df[target_col].values
-        X = df.drop(columns=[target_col])
-        
-        # Handle dates/stamps
-        if 'scraped_at' in X.columns:
-            X = X.drop(columns=['scraped_at'])
             
-        # Encode string columns
-        for col in X.columns:
-            if X[col].dtype == 'object' or col in cat_cols:
-                le = LabelEncoder()
-                X[col] = le.fit_transform(X[col].astype(str))
-                self.label_encoders[col] = le
+        median_price = df[target_col].median()
+        if median_price > 200:
+            print(f"⚠️ Unit Mismatch Detected (Median: {median_price}). Converting to Lakhs.")
+            df[target_col] = df[target_col] / 100000
+            
+        X, self.features = self.prepare_features(df, is_training=True)
+        y = df[target_col].values
         
-        # Fill NaNs
-        X = X.fillna(0)
+        print(f"📊 Training on {len(X)} rows with features: {self.features}")
+        print(f"DEBUG: First 5 target prices (y): {y[:5]}")
         
-        # Convert to numeric just in case
-        X = X.apply(pd.to_numeric, errors='coerce').fillna(0)
-
-        # Train models
-        print(f"📊 Training on {len(X)} rows with {len(X.columns)} features: {list(X.columns)}")
-        self.rf_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-        self.rf_model.fit(X, y)
+        self.models['rf'] = RandomForestRegressor(n_estimators=100, max_depth=12, random_state=42, n_jobs=-1)
+        self.models['rf'].fit(X, y)
         
-        self.gb_model = GradientBoostingRegressor(n_estimators=100, random_state=42)
-        self.gb_model.fit(X, y)
+        self.models['gb'] = GradientBoostingRegressor(n_estimators=100, max_depth=5, random_state=42)
+        self.models['gb'].fit(X, y)
         
         if XGB_AVAILABLE:
-            try:
-                self.xgb_model = XGBRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-                self.xgb_model.fit(X, y)
-                self.lgbm_model = LGBMRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-                self.lgbm_model.fit(X, y)
-            except Exception as e:
-                print(f"⚠️ XGBoost/LightGBM training failed: {e}")
-        
+            self.models['xgb'] = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
+            self.models['xgb'].fit(X, y)
+            
         self.save_models()
-        self.features = list(X.columns) # Store feature order
-        joblib.dump(self.features, f"{self.models_path}/features.pkl")
-        print("✅ Models trained and saved.")
-
-    def predict(self, car_data: Dict, market_data: Dict = None) -> Dict:
-        """
-        Generate weighted prediction.
-        """
-        # Load features list to ensure correct order
-        if not hasattr(self, 'features'):
-            if os.path.exists(f"{self.models_path}/features.pkl"):
-                self.features = joblib.load(f"{self.models_path}/features.pkl")
-            else:
-                self.features = ['make', 'model', 'variant', 'year', 'km', 'city', 'source']
-
-        # Prepare input row
-        input_row = {}
-        for feat in self.features:
-            val = car_data.get(feat, "")
-            # Mapping some common field differences if any
-            if feat == 'km' and 'km_driven' in car_data: val = car_data['km_driven']
-            
-            # Encode if we have an encoder for it
-            if feat in self.label_encoders:
-                le = self.label_encoders[feat]
-                try:
-                    # Handle unseen labels by mapping to a safe default or -1
-                    if str(val) in le.classes_:
-                        val = le.transform([str(val)])[0]
-                    else:
-                        val = -1 # Or some other logic for unknown
-                except:
-                    val = -1
-            
-            input_row[feat] = val
-
-        X_input = pd.DataFrame([input_row])[self.features]
-        X_input = X_input.apply(pd.to_numeric, errors='coerce').fillna(0)
-
-        # Model Predictions
-        rf_pred = 0
-        gb_pred = 0
-        xgb_pred = 0
-        
-        if self.rf_model:
-            rf_pred = self.rf_model.predict(X_input)[0]
-        if self.gb_model:
-            gb_pred = self.gb_model.predict(X_input)[0]
-        if self.xgb_model:
-            xgb_pred = self.xgb_model.predict(X_input)[0]
-
-        # Weights: If models are near 0 (not loaded), use synthetic fallbacks or just 1.0 to avoid 0 price
-        # Actually prices in the dataset are absolute, we should convert to Lakhs if they are in the millions
-        def to_lakhs(val):
-            return round(val / 100000, 2) if val > 1000 else val
-
-        rf_l = to_lakhs(rf_pred)
-        gb_l = to_lakhs(gb_pred)
-        xgb_l = to_lakhs(xgb_pred) if xgb_pred > 0 else (rf_l + gb_l) / 2
-
-        # Market Anchor
-        market_median = market_data['statistics']['median'] if market_data and market_data.get('success') else (rf_l + gb_l) / 2
-        
-        # Weighted Ensemble: XGB (40%), RF (30%), GB (20%), Market (10%)
-        # Adjusting weights if XGB is missing
-        if self.xgb_model:
-            final_price = (xgb_l * 0.40 + rf_l * 0.30 + gb_l * 0.20 + market_median * 0.10)
-        else:
-            final_price = (rf_l * 0.45 + gb_l * 0.35 + market_median * 0.20)
-        
-        # KM Adjustment (Secondary sanity check)
-        km = car_data.get('km_driven', car_data.get('km', 50000))
-        km_factor = 1.0
-        if km < 20000: km_factor = 1.05
-        elif km > 100000: km_factor = 0.90
-        
-        final_price *= km_factor
-        
-        confidence = "Medium"
-        if market_data and market_data.get('success') and market_data['count'] > 5:
-            confidence = "High"
-        elif not self.rf_model:
-            confidence = "Low (Models not loaded)"
-            
-        return {
-            'final_price': round(final_price, 2),
-            'confidence': confidence,
-            'breakdown': {
-                'xgboost': round(xgb_l, 2),
-                'random_forest': round(rf_l, 2),
-                'gradient_boosting': round(gb_l, 2),
-                'market_anchor': round(market_median, 2)
-            },
-            'top_listings': market_data.get('listings', [])[:3] if market_data else [],
-            'km_factor': km_factor
-        }
 
     def save_models(self):
         self._ensure_dir()
-        joblib.dump(self.rf_model, f"{self.models_path}/rf.pkl")
-        joblib.dump(self.gb_model, f"{self.models_path}/gb.pkl")
-        if XGB_AVAILABLE:
-            joblib.dump(self.xgb_model, f"{self.models_path}/xgb.pkl")
-    
+        for name, model in self.models.items():
+            if model:
+                joblib.dump(model, f"{self.models_path}/{name}.pkl")
+        joblib.dump(self.label_encoders, f"{self.models_path}/encoders.pkl")
+        joblib.dump(self.features, f"{self.models_path}/features.pkl")
+
     def load_models(self):
-        if os.path.exists(f"{self.models_path}/rf.pkl"):
-            self.rf_model = joblib.load(f"{self.models_path}/rf.pkl")
-            self.gb_model = joblib.load(f"{self.models_path}/gb.pkl")
-            print("✅ Models loaded.")
-        else:
-            print("⚠️ Models not found.")
+        if not os.path.exists(self.models_path): return
+        for name in self.models.keys():
+            path = f"{self.models_path}/{name}.pkl"
+            if os.path.exists(path):
+                self.models[name] = joblib.load(path)
+        
+        encoder_path = f"{self.models_path}/encoders.pkl"
+        if os.path.exists(encoder_path):
+            self.label_encoders = joblib.load(encoder_path)
+            
+        feat_path = f"{self.models_path}/features.pkl"
+        if os.path.exists(feat_path):
+            self.features = joblib.load(feat_path)
+
+    def predict(self, car_data: Dict, market_data: Dict = None) -> Dict:
+        """
+        Safe prediction with validation layer.
+        """
+        df_input = pd.DataFrame([car_data])
+        X, _ = self.prepare_features(df_input, is_training=False)
+        
+        predictions = {}
+        for name, model in self.models.items():
+            if model:
+                try:
+                    raw_p = model.predict(X)[0]
+                    p = float(raw_p)
+                    # Validation: Reject if absurd
+                    if self.price_bounds['min'] <= p <= self.price_bounds['max']:
+                        predictions[name] = round(p, 2)
+                    else:
+                        print(f"DEBUG: {name} model predicted {p} (OUT OF BOUNDS {self.price_bounds})")
+                except Exception as e:
+                    print(f"⚠️ {name} prediction error: {e}")
+                    
+        if not predictions:
+            return self._fallback_estimate(car_data)
+            
+        # Weighted Ensemble
+        # Weights: RF (40%), GB (40%), XGB/LGB (20%)
+        final_price = 0
+        total_w = 0
+        weights = {'rf': 0.4, 'gb': 0.4, 'xgb': 0.2, 'lgbm': 0.2}
+        
+        for name, p in predictions.items():
+            w = weights.get(name, 0.1)
+            final_price += p * w
+            total_w += w
+            
+        final_price /= total_w
+        
+        # Market Adjustment
+        if market_data and market_data.get('success'):
+            m_median = market_data['statistics']['median']
+            # Anchor to market (30% weight)
+            final_price = (final_price * 0.7) + (m_median * 0.3)
+            
+        return {
+            'final_price': round(final_price, 2),
+            'breakdown': predictions,
+            'confidence': 'High' if len(predictions) >= 2 else 'Medium',
+            'models_used': list(predictions.keys())
+        }
+
+    def _fallback_estimate(self, car_data: Dict) -> Dict:
+        """Rule-based estimate if ML fails."""
+        # Very crude fallback
+        year = car_data.get('year', 2018)
+        age = 2024 - year
+        base = 8.0 # Default segment average
+        dep = (0.85) ** age
+        est = base * dep
+        return {
+            'final_price': round(est, 2),
+            'breakdown': {'fallback': round(est, 2)},
+            'confidence': 'Low (Fallback)',
+            'models_used': ['rule']
+        }
 
 if __name__ == "__main__":
     predictor = EnsemblePricePredictor()
