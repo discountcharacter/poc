@@ -44,7 +44,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.1.1"
+VERSION = "Rescue-v1.1.2"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
@@ -483,10 +483,11 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             <div class="metric-value">{format_currency(oracle_price)}</div>
         </div>
         """, unsafe_allow_html=True)
-        with st.expander("AI Analysis"):
-             st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-             st.write(oracle_debug)
-             st.markdown('</div>', unsafe_allow_html=True)
+        # Hiding AI Analysis details for team presentation
+        # with st.expander("AI Analysis"):
+        #      st.markdown('<div class="debug-content">', unsafe_allow_html=True)
+        #      st.write(oracle_debug)
+        #      st.markdown('</div>', unsafe_allow_html=True)
 
     with row1[3]:
         st.markdown(f"""
