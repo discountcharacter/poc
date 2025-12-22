@@ -11,9 +11,15 @@ from src.engine_scout import fetch_market_prices
 from src.engine_oracle import get_gemini_estimate
 from src.engine_sniper import fetch_closest_match
 from src.engine_ml import get_ml_prediction
-from src.engine_cars24 import get_cars24_price, session_exists as cars24_session_exists
 from src.utils import format_currency
 import statistics
+
+# Optional: Engine F (Cars24) - Requires Playwright
+try:
+    from src.engine_cars24 import get_cars24_price, session_exists as cars24_session_exists
+    CARS24_SUPPORTED = True
+except (ImportError, ModuleNotFoundError):
+    CARS24_SUPPORTED = False
 
 # Page Config
 st.set_page_config(
@@ -310,12 +316,14 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         # 6. Engine F: Cars24 (Browser Automation)
         cars24_price = None
         cars24_debug = "Session not configured. Run setup_cars24_session.py first."
-        if cars24_session_exists():
+        if CARS24_SUPPORTED and cars24_session_exists():
             try:
                 transmission = "Automatic" if "auto" in variant.lower() or "amt" in variant.lower() or "cvt" in variant.lower() else "Manual"
                 cars24_price, cars24_debug = get_cars24_price(make, model, year, variant, fuel, transmission, km, location)
             except Exception as e:
                 cars24_debug = f"Error: {str(e)}"
+        elif not CARS24_SUPPORTED:
+            cars24_debug = "Cars24 engine (Playwright) is not supported in this environment."
         
         # Weighted Final Price
         # ML gets 20% weight if available
@@ -432,8 +440,10 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         with st.expander("Cars24 Info"):
             st.markdown('<div class="debug-content">', unsafe_allow_html=True)
             st.write(cars24_debug)
-            if not cars24_session_exists():
+            if CARS24_SUPPORTED and not cars24_session_exists():
                 st.warning("Run `python setup_cars24_session.py` to enable")
+            elif not CARS24_SUPPORTED:
+                st.info("Desktop only feature")
             st.markdown('</div>', unsafe_allow_html=True)
     
     # 3. Chart

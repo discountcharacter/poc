@@ -7,7 +7,12 @@ import os
 import json
 import re
 from pathlib import Path
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+try:
+    from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+except (ImportError, ModuleNotFoundError):
+    # This will be handled in main.py, but we define placeholders to avoid name errors
+    sync_playwright = None
+    PlaywrightTimeout = Exception
 
 # Session file location
 SESSION_FILE = Path(__file__).parent.parent / ".cars24_session.json"
