@@ -28,8 +28,14 @@ def get_gemini_estimate(make, model, year, variant, km, condition, location, rem
     - Condition: {condition}
     - Additional Remarks: "{remarks}"
 
-    REAL-TIME MARKET CONTEXT (Use this data to ground your estimate):
+    REAL-TIME MARKET CONTEXT (Treat this data as SUGGESTIONS, not absolute facts):
     {context_data}
+
+    CRITICAL INSTRUCTIONS:
+    1. **Don't Blindly Copy**: If the "ML Model Prediction" or "Depreciation Logic" seems wrong based on your expert knowledge of the Indian car market (e.g., a 2025 car being valued too low), you MUST override it.
+    2. **Ground Truth**: A 2024/2025 car with low mileage (<5000 km) is essentially NEW. It should be valued at its "Ex-Showroom Price - 10-15%" plus taxes/registration value, unless there is specific market evidence otherwise.
+    3. **Context Sensitivity**: If "Sniper" or "Scout" found direct matches, they are your best source. If they found nothing, use your internal knowledge of current ex-showroom prices for this specific model in India.
+    4. **ML Anchoring**: Do not simply repeat the ML prediction. Evaluate if the ML score (trained on historical data) is accurate for a current-year or next-year model.
 
     Step 1: Market Research Analysis
     - Analyze the provided "Real-Time Market Context". 
@@ -41,21 +47,20 @@ def get_gemini_estimate(make, model, year, variant, km, condition, location, rem
     - Adjust for mileage (High/Low) and condition.
 
     Step 3: Comparative Analysis
-    - Compare with similar models.
+    - Compare with similar models using your internal knowledge.
 
     Step 4: Final Valuation
     - Provide a specific estimated fair market value in INR.
 
     OUTPUT FORMAT:
-    First, provide a brief (2-3 bullet points) "Market Analysis" explaining your reasoning and how you used the context data.
+    First, provide a brief (2-3 bullet points) "Market Analysis" explaining your reasoning. Be explicit about why you accepted or REJECTED the provided context data.
     Then, on the very last line, provide ONLY the numeric value in INR.
     
     Example Output:
     Market Analysis:
-    - Context shows similar 2020 models listed at ~11L.
-    - Depreciation from base price verifies this range.
-    - Remarks add slight premium.
-    Final Price: 1120000
+    - Context showed an ML prediction of 8L, but this is a 2025 top-spec variant which currently retails at 10L; thus I am adjusting upwards.
+    - Very low mileage justifies a smaller depreciation than the standard 15%.
+    Final Price: 910000
     """
     
     payload = {

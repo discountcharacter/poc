@@ -34,24 +34,34 @@ SEGMENT_KM_LIMIT = {
 # Let's create a simple database of base model prices (Average Ex-Showroom)
 BASE_PRICES = {
     "Maruti Swift": 900000,
+    "Maruti Baleno": 1000000,
     "Hyundai Creta": 1500000, 
     "Kia Seltos": 1600000,
     "Toyota Fortuner": 4000000,
     "Honda City": 1400000,
     "Mahindra Thar": 1600000,
     "Tata Nexon": 1200000,
+    "Tata Tigor": 850000,
+    "Tata Tiago": 750000,
+    "Tata Altroz": 950000,
+    "Tata Punch": 900000,
     "BMW 3 Series": 5000000,
     "Mercedes-Benz C-Class": 5500000
 }
 
 SEGMENT_MAP = {
     "Maruti Swift": "Entry Hatchback",
+    "Maruti Baleno": "Entry Hatchback",
     "Hyundai Creta": "Compact SUV",
     "Kia Seltos": "Compact SUV",
     "Toyota Fortuner": "Luxury",
-    "Honda City": "Entry Hatchback", # Simplification
+    "Honda City": "Entry Hatchback",
     "Mahindra Thar": "Compact SUV",
     "Tata Nexon": "Compact SUV",
+    "Tata Tigor": "Entry Hatchback",
+    "Tata Tiago": "Entry Hatchback",
+    "Tata Altroz": "Entry Hatchback",
+    "Tata Punch": "Compact SUV",
     "BMW 3 Series": "Luxury",
     "Mercedes-Benz C-Class": "Luxury"
 }
@@ -107,8 +117,10 @@ def get_real_base_price(make, model, variant, year, api_key, cx):
                 for match in matches:
                     try:
                         val = float(match[0])
-                        # Launch prices usually 4L to 100L
+                        # Launch prices usually 4L to 150L
+                        # For 2024/2025 cars, we want the most recent higher price
                         if 4.0 < val < 150.0:
+                            if year >= 2024 and val < 6.0: continue # Likely old base model price
                             return int(val * 100000), f"Found via query: '{q}'"
                     except:
                         continue
@@ -142,8 +154,13 @@ def calculate_logic_price(make, model, year, variant, km, condition, owners, loc
     category = BRAND_CATEGORY.get(make, "B")
     rate = DEPRECIATION_RATES.get(category, 0.12)
     
-    depreciated_value = base_price * ((1 - rate) ** age)
-    log.append(f"Depreciation ({age} yrs @ {int(rate*100)}%): - ₹ {int(base_price - depreciated_value):,}")
+    # Special Handling for Brand New Cars (2024/2025)
+    if age == 0:
+        depreciated_value = base_price * 0.95 # Only 5% drop if virtually new
+        log.append(f"Near-New Car Bonus (2025): Only 5% initial drop: - ₹ {int(base_price - depreciated_value):,}")
+    else:
+        depreciated_value = base_price * ((1 - rate) ** age)
+        log.append(f"Depreciation ({age} yrs @ {int(rate*100)}%): - ₹ {int(base_price - depreciated_value):,}")
     
     # 3. Usage Penalty
     segment = get_segment(make, model)
