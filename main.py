@@ -459,10 +459,10 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             <div class="metric-value">{format_currency(logic_price)}</div>
         </div>
         """, unsafe_allow_html=True)
-        with st.expander("Details"):
-            st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-            for l in logic_log: st.write(l)
-            st.markdown('</div>', unsafe_allow_html=True)
+        # with st.expander("Details"):
+        #     st.markdown('<div class="debug-content">', unsafe_allow_html=True)
+        #     for l in logic_log: st.write(l)
+        #     st.markdown('</div>', unsafe_allow_html=True)
             
     with row1[1]:
         st.markdown(f"""
@@ -471,10 +471,10 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             <div class="metric-value">{format_currency(scout_price) if scout_price else "No Data"}</div>
         </div>
         """, unsafe_allow_html=True)
-        with st.expander("Listings"):
-            st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-            st.text(scout_data)
-            st.markdown('</div>', unsafe_allow_html=True)
+        # with st.expander("Listings"):
+        #     st.markdown('<div class="debug-content">', unsafe_allow_html=True)
+        #     st.text(scout_data)
+        #     st.markdown('</div>', unsafe_allow_html=True)
 
     with row1[2]:
         st.markdown(f"""
@@ -496,11 +496,11 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             <div class="metric-value" style="color: #1E40AF">{format_currency(ensemble_price)}</div>
         </div>
         """, unsafe_allow_html=True)
-        with st.expander("Breakdown"):
-            st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-            st.write(f"Confidence: **{ensemble_result['confidence']}**")
-            st.json(ensemble_result['breakdown'])
-            st.markdown('</div>', unsafe_allow_html=True)
+        # with st.expander("Breakdown"):
+        #     st.markdown('<div class="debug-content">', unsafe_allow_html=True)
+        #     st.write(f"Confidence: **{ensemble_result['confidence']}**")
+        #     st.json(ensemble_result['breakdown'])
+        #     st.markdown('</div>', unsafe_allow_html=True)
 
     with row2[0]:
         st.markdown(f"""
@@ -509,14 +509,14 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             <div class="metric-value">{format_currency(smart_market_price) if smart_market_price else "No Data"}</div>
         </div>
         """, unsafe_allow_html=True)
-        with st.expander("Market Map"):
-            st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-            if smart_market_data.get('success'):
-                st.write(f"Found {smart_market_data['count']} filtered listings.")
-                st.json(smart_market_data['statistics'])
-            else:
-                st.write(smart_market_data.get('message', 'No data'))
-            st.markdown('</div>', unsafe_allow_html=True)
+        # with st.expander("Market Map"):
+        #     st.markdown('<div class="debug-content">', unsafe_allow_html=True)
+        #     if smart_market_data.get('success'):
+        #         st.write(f"Found {smart_market_data['count']} filtered listings.")
+        #         st.json(smart_market_data['statistics'])
+        #     else:
+        #         st.write(smart_market_data.get('message', 'No data'))
+        #     st.markdown('</div>', unsafe_allow_html=True)
 
     with row2[1]:
         val_sniper = format_currency(sniper_price) if sniper_price else "No Match"
@@ -528,7 +528,7 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         """, unsafe_allow_html=True)
         with st.expander("Sniper Match Info"):
              st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-             st.write(sniper_debug)
+             st.write("Technical matching logs suppressed for team presentation.")
              st.markdown('</div>', unsafe_allow_html=True)
 
     with row2[2]:
