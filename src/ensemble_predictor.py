@@ -97,20 +97,23 @@ class EnsemblePricePredictor:
                     df[col] = -1
         
         # 5. Select Final Features (Must match exactly)
-        if is_training:
-            self.features = ['age', 'age_squared', 'km', 'km_per_year'] + cat_cols
-        
-        # Ensure all columns exist and are in correct order
-        if not self.features:
-            # Fallback if NOT training and NOT loaded (unlikely)
+        if is_training or not self.features:
             self.features = ['age', 'age_squared', 'km', 'km_per_year'] + cat_cols
             
-        # Reindex to force column match
+        # Final Guard: Ensure DF has all expected columns
+        # Use reindex to both filter and add missing columns as 0
         df = df.reindex(columns=self.features, fill_value=0)
         
-        # Fill NaN for safety
+        # Double check for NaN
         df = df.fillna(0)
         
+        # Verify columns match self.features exactly
+        missing = [c for c in self.features if c not in df.columns]
+        if missing:
+            for c in missing:
+                df[c] = 0
+                
+        # Final return - this cannot throw KeyError now
         return df[self.features], self.features
 
     def train(self, df: pd.DataFrame):
