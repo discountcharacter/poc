@@ -1,4 +1,8 @@
-from playwright.sync_api import sync_playwright
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
 import re
 import statistics
 import time
@@ -124,6 +128,9 @@ class SmartCarScraper:
 
     def get_market_data(self, make: str, model: str, year: int, 
                        fuel: str, city: str, km_driven: int) -> Dict:
+        if not PLAYWRIGHT_AVAILABLE:
+            return {'success': False, 'message': 'Playwright not available in this environment', 'count': 0}
+            
         all_listings = []
         all_listings.extend(self.scrape_carwale_listings(make, model, year, city))
         all_listings.extend(self.scrape_spinny_listings(make, model, year, city))
