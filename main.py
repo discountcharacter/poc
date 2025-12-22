@@ -44,7 +44,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.1.0"
+VERSION = "Rescue-v1.1.1"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
@@ -281,7 +281,7 @@ def main():
     # Row 3: Location (New)
     col_x, col_y = st.columns([1, 1])
     with col_x:
-        location = st.text_input("Location (City/State)", value="Mumbai", help="Location influences demand and pricing.")
+        location = st.text_input("Location (City/State)", value="Hyderabad", help="Location influences demand and pricing.")
     with col_y:
         remarks = st.text_area("Additional Remarks / Observations", height=100, placeholder="E.g. Sunroof, Accident History, New Tyres, VIP Number, Scratch on door...", help="These details will be used by all engines to refine the price.")
 
@@ -423,6 +423,16 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
     with col_f2:
         conf_score = "High" if len(filtered_prices) >= 5 else "Medium"
         st.info(f"Consensus Confidence: **{conf_score}** (IQR filtered {len(prices) - len(filtered_prices)} outliers)")
+        
+        # Direct Links from Sniper Engine (Featured here for quick access)
+        if carwale_url or spinny_url:
+            st.markdown("---")
+            st.write("🔍 **View Direct Matches:**")
+            cols = st.columns(2)
+            if carwale_url:
+                with cols[0]: st.markdown(f"**[🔗 CarWale Listing]({carwale_url})**")
+            if spinny_url:
+                with cols[1]: st.markdown(f"**[🔗 Spinny Listing]({spinny_url})**")
 
     # Consolidate Breakdown for Graph
     graph_data = pd.DataFrame({
@@ -517,12 +527,6 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         """, unsafe_allow_html=True)
         with st.expander("Sniper Match Info"):
              st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-             if carwale_url:
-                 st.markdown(f"**[🔗 Direct Match: CarWale]({carwale_url})**")
-             if spinny_url:
-                 st.markdown(f"**[🔗 Direct Match: Spinny]({spinny_url})**")
-             if carwale_url or spinny_url:
-                 st.write("---")
              st.write(sniper_debug)
              st.markdown('</div>', unsafe_allow_html=True)
 
