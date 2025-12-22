@@ -97,24 +97,43 @@ class EnsemblePricePredictor:
                     df[col] = -1
         
         # 5. Select Final Features (Must match exactly)
-        if is_training or not self.features:
-            self.features = ['age', 'age_squared', 'km', 'km_per_year'] + cat_cols
+        # For prediction, we enforce the architecture's expected features
+        # This bypasses any stale features.pkl from older training runs
+        arch_features = ['age', 'age_squared', 'km', 'km_per_year'] + cat_cols
+        
+        if is_training:
+            self.features = arch_features
+        
+        # Guard: Rebuild features if missing or mismatch (forcing architecture consistency)
+        target_features = arch_features
+        
+        # Explicitly ensure columns exist in df before reindexing
+        for col in target_features:
+            if col not in df.columns:
+                if col in cat_cols:
+                    df[col] = "unknown"
+                else:
+                    df[col] = 0
+                    
+        # Debug print for server logs (visible in Streamlit 'Manage App')
+        print(f"DEBUG [prepare_features]: Input columns: {list(df.columns)}")
+        print(f"DEBUG [prepare_features]: Target columns: {target_features}")
             
         # Final Guard: Ensure DF has all expected columns
-        # Use reindex to both filter and add missing columns as 0
-        df = df.reindex(columns=self.features, fill_value=0)
+        df = df.reindex(columns=target_features, fill_value=0)
         
         # Double check for NaN
         df = df.fillna(0)
         
-        # Verify columns match self.features exactly
-        missing = [c for c in self.features if c not in df.columns]
+        # Verify columns match target_features exactly
+        missing = [c for c in target_features if c not in df.columns]
         if missing:
+            print(f"ALERT: Features still missing after reindex: {missing}")
             for c in missing:
                 df[c] = 0
                 
         # Final return - this cannot throw KeyError now
-        return df[self.features], self.features
+        return df[target_features], target_features
 
     def train(self, df: pd.DataFrame):
         """

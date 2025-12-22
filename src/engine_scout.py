@@ -36,6 +36,7 @@ def fetch_market_prices(make, model, year, variant, km, api_key, cx, location, r
         if "items" not in data:
             return None, []
             
+        prices = []
         # Regex for price extraction - Stricter to avoid matching mileage + "Location"
         # We look for Lakh/Lakhs or a standalone L but with word boundaries
         price_pattern = re.compile(r"\b(\d{1,3}(?:\.\d{1,2})?)\s*(?:Lakh|Lakhs|L)\b", re.IGNORECASE)
