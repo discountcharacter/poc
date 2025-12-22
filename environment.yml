@@ -14,3 +14,6 @@ dependencies:
     - scikit-learn==1.3.2
     - joblib
     - beautifulsoup4
+    - xgboost
+    - lightgbm
+    - playwright
