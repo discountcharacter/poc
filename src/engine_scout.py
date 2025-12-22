@@ -36,25 +36,34 @@ def fetch_market_prices(make, model, year, variant, km, api_key, cx, location, r
         if "items" not in data:
             return None, []
             
-        prices = []
-        # Regex for price extraction
-        price_pattern = re.compile(r"(\d+(\.\d+)?)\s*(?:Lakh|Lakhs|L)", re.IGNORECASE)
+        # Regex for price extraction - Stricter to avoid matching mileage + "Location"
+        # We look for Lakh/Lakhs or a standalone L but with word boundaries
+        price_pattern = re.compile(r"\b(\d{1,3}(?:\.\d{1,2})?)\s*(?:Lakh|Lakhs|L)\b", re.IGNORECASE)
         
         for item in data["items"]:
             title = item.get("title", "")
             snippet = item.get("snippet", "")
             full_text = snippet + " " + title
             
+            # Remove commas from full_text to handle 10,00,000 correctly if it appears
+            # But be careful not to mess up the "XX,XXX km" pattern
+            # Actually, let's just match the patterns we want
+            
             matches = price_pattern.findall(full_text)
             
             for match in matches:
                 try:
                     val = float(match[0])
-                    # Basic sanity check
-                    if 1.0 < val < 200.0: 
-                        actual_price = val * 100000
+                    # Basic sanity check: 1L to 500L (5 Cr)
+                    if 1.0 <= val <= 500.0: 
+                        actual_price = int(val * 100000)
+                        
+                        # Even stricter: If it's a non-luxury 2017 car, ₹96L is impossible.
+                        # We can add a loose bound check if we had base price here, 
+                        # but for now, the stricter regex should solve the "96" vs "96,000 km" issue.
+                        
                         prices.append(actual_price)
-                        debug_data.append({"title": title, "raw_price": f"{val} Lakh"})
+                        debug_data.append({"title": title[:60] + "...", "raw_price": f"{val} Lakh"})
                 except ValueError:
                     continue
                     
