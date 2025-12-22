@@ -2,6 +2,7 @@ import streamlit as st
 import os
 from dotenv import load_dotenv
 import pandas as pd
+import numpy as np
 
 # Load environment variables (Server-side only)
 load_dotenv()
@@ -43,7 +44,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.0.8"
+VERSION = "Rescue-v1.0.9"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>

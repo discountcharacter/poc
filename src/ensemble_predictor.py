@@ -30,7 +30,7 @@ class EnsemblePricePredictor:
     3. Validation Layer (Reject absurd predictions)
     4. Fallback Logic
     """
-    VERSION = "Rescue-v1.0.8"
+    VERSION = "Rescue-v1.0.9"
     
     def __init__(self, models_path: str = "models/ensemble"):
         self.models_path = models_path
