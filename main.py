@@ -43,6 +43,8 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
+VERSION = "Rescue-v1.0.5"
+st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
     /* 1. Force Light Mode Background & Font */

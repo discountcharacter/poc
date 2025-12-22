@@ -100,13 +100,15 @@ class EnsemblePricePredictor:
         if is_training:
             self.features = ['age', 'age_squared', 'km', 'km_per_year'] + cat_cols
         
-        # Fill missing features for prediction
-        if not is_training:
-            for f in self.features:
-                if f not in df.columns:
-                    df[f] = 0
+        # Ensure all columns exist and are in correct order
+        if not self.features:
+            # Fallback if NOT training and NOT loaded (unlikely)
+            self.features = ['age', 'age_squared', 'km', 'km_per_year'] + cat_cols
+            
+        # Reindex to force column match
+        df = df.reindex(columns=self.features, fill_value=0)
         
-        # Fill NaN
+        # Fill NaN for safety
         df = df.fillna(0)
         
         return df[self.features], self.features
