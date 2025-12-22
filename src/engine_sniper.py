@@ -238,44 +238,27 @@ def fetch_closest_match(make, model, year, variant, km, city, api_key_search, se
         details = []
         title_lower = cand["title"].lower()
         
-        # 1. Model Match (Basic filtering)
+        # 1. Model Match
         model_tokens = model.lower().split()
         match_count = sum(1 for token in model_tokens if token in title_lower)
         if len(model_tokens) > 0 and (match_count / len(model_tokens) < 0.5):
             return -1, "Model Mismatch"
         
-        # 2. Year Match (Strong preference for exact)
+        # 2. Year Match (Prioritize Exact)
         if str(year) in title_lower:
             score += 100
             details.append("Year:Exact(+100)")
         elif str(year-1) in title_lower or str(year+1) in title_lower:
-            score += 30
-            details.append("Year:Near(+30)")
-        else:
-            # Fallback if year not in title but passed filter (shouldn't happen with current Scraping logic)
-            score += 10
-            details.append("Year:Match(+10)")
+            score += 20  # Lowered weight for "Near" matches
+            details.append("Year:Near(+20)")
              
-        # 3. Variant Match (Improved overlap scoring)
-        # We want to match search variant words to title words
-        # but also penalize if the title has many extra model-specific words
-        var_words = set(variant_lower.split())
-        title_words = set(title_lower.split())
-        
-        # Intersection
-        matches = var_words.intersection(title_words)
-        match_ratio = len(matches) / len(var_words) if var_words else 1.0
-        
-        # Penalty for extra descriptive words that aren't in search variant
-        # (Exclude brand/model/year tokens from penalty)
-        noise_words = {"pro", "plus", "new", "all", "the", "automatic", "manual", "petrol", "diesel", "cng"}
-        exclude_penalty = set(make.lower().split()) | set(model.lower().split()) | {str(year), str(year-1), str(year+1)} | noise_words
-        extra_words = title_words - var_words - exclude_penalty
-        penalty = min(len(extra_words) * 5, 20) # Max penalty 20
-        
-        variant_score = int(match_ratio * 50) - penalty
-        score += variant_score
-        details.append(f"Var:{variant_score}({len(matches)}/{len(var_words)})")
+        # 3. Variant Match (Simpler overlap)
+        var_words = variant_lower.split()
+        matches = sum(1 for w in var_words if w in title_lower)
+        if len(var_words) > 0:
+            var_score = int(50 * (matches / len(var_words)))
+            score += var_score
+            details.append(f"Var:{var_score}({matches}/{len(var_words)})")
             
         return score, ", ".join(details)
     

@@ -44,7 +44,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.0.9"
+VERSION = "Rescue-v1.1.0"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
@@ -517,6 +517,12 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         """, unsafe_allow_html=True)
         with st.expander("Sniper Match Info"):
              st.markdown('<div class="debug-content">', unsafe_allow_html=True)
+             if carwale_url:
+                 st.markdown(f"**[🔗 Direct Match: CarWale]({carwale_url})**")
+             if spinny_url:
+                 st.markdown(f"**[🔗 Direct Match: Spinny]({spinny_url})**")
+             if carwale_url or spinny_url:
+                 st.write("---")
              st.write(sniper_debug)
              st.markdown('</div>', unsafe_allow_html=True)
 
