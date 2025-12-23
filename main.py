@@ -25,15 +25,26 @@ except (ImportError, ModuleNotFoundError):
 
 install_playwright_browsers()
 
-from src.engine_logic import calculate_logic_price
-from src.engine_scout import fetch_market_prices
-from src.engine_oracle import get_gemini_estimate
-from src.engine_sniper import fetch_closest_match
-from src.engine_research import get_market_estimate
-from src.engine_ml import get_ml_prediction
-from src.engine_smart_scraper import SmartCarScraper
-from src.ensemble_predictor import EnsemblePricePredictor
-from src.utils import format_currency
+try:
+    from src.engine_logic import calculate_logic_price
+    from src.engine_scout import fetch_market_prices
+    from src.engine_oracle import get_gemini_estimate
+    from src.engine_sniper import fetch_closest_match
+    from src.engine_research import get_market_estimate
+    from src.engine_ml import get_ml_prediction
+    from src.engine_smart_scraper import SmartCarScraper
+    from src.ensemble_predictor import EnsemblePricePredictor
+    from src.utils import format_currency
+except (ImportError, ModuleNotFoundError):
+    from engine_logic import calculate_logic_price
+    from engine_scout import fetch_market_prices
+    from engine_oracle import get_gemini_estimate
+    from engine_sniper import fetch_closest_match
+    from engine_research import get_market_estimate
+    from engine_ml import get_ml_prediction
+    from engine_smart_scraper import SmartCarScraper
+    from ensemble_predictor import EnsemblePricePredictor
+    from utils import format_currency
 import statistics
 
 # Initialize New Engines
@@ -63,7 +74,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.1.8"
+VERSION = "Rescue-v1.1.9"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>

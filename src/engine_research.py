@@ -86,36 +86,51 @@ class MarketResearchEngine:
         }
 
     def _scrape_carwale(self, make: str, model: str, year: int, city: str) -> List[Dict]:
-        listings = []
-        # Attempt BeautifulSoup first for CarWale as it's faster
-        try:
-            make_slug = make.lower().replace(' ', '-')
-            model_slug = model.lower().replace(' ', '-')
-            city_slug = city.lower().replace(' ', '-')
-            url = f"https://www.carwale.com/used/{make_slug}-{model_slug}-cars-in-{city_slug}/"
+        # Requires Playwright
+        from src.engine_smart_scraper import PLAYWRIGHT_READY as PR_GLOBAL
+        if not sync_playwright or not PR_GLOBAL:
+            return []
             
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.content, 'html.parser')
-                cards = soup.find_all('div', class_='o-cpnuEd')
+        listings = []
+        try:
+            with sync_playwright() as p:
+                browser = self._safe_launch(p)
+                if not browser: return []
+                page = browser.new_page()
+                
+                make_slug = make.lower().replace(' ', '-')
+                model_slug = model.lower().replace(' ', '-')
+                city_slug = city.lower().replace(' ', '-')
+                url = f"https://www.carwale.com/used/{make_slug}-{model_slug}-cars-in-{city_slug}/"
+                
+                print(f"   📍 CarWale: {url}")
+                page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                time.sleep(2)
+                
+                # Extract cards using the robust selector
+                cards = page.query_selector_all('.o-cpnuEd, .used-car-card, [data-track-label="ListingCard"]')
+                print(f"   🎴 CarWale Cards Found: {len(cards)}")
+                
                 for card in cards[:15]:
-                    text = card.get_text()
-                    price_match = re.search(r'₹\s*([\d.]+)\s*(?:Lakh|L)', text, re.IGNORECASE)
+                    inner_text = card.inner_text()
+                    # Price
+                    price_match = re.search(r'₹\s*([\d.]+)\s*(?:Lakh|L)', inner_text, re.IGNORECASE)
                     if not price_match: continue
-                    
                     price = float(price_match.group(1))
-                    year_match = re.search(r'\b(20\d{2})\b', text)
+                    
+                    # Year
+                    year_match = re.search(r'\b(20\d{2})\b', inner_text)
                     car_year = int(year_match.group(1)) if year_match else None
                     
                     listings.append({
                         'source': 'CarWale',
                         'price': price,
                         'year': car_year,
-                        'title': text[:100].replace('\n', ' ')
+                        'title': inner_text[:100].replace('\n', ' ')
                     })
-        except:
-            pass
+                browser.close()
+        except Exception as e:
+            print(f"   ⚠️ CarWale Playwright Failed: {e}")
         return listings
 
     def _scrape_spinny(self, make: str, model: str, year: int, city: str) -> List[Dict]:
