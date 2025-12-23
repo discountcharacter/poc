@@ -9,6 +9,20 @@ from src.playwright_utils import install_playwright_browsers
 load_dotenv()
 
 # Initialize Playwright (Automatic install for Streamlit Cloud)
+import sys
+# Ensure 'src' is in path for cloud deployments
+src_path = os.path.join(os.getcwd(), 'src')
+if src_path not in sys.path:
+    sys.path.append(src_path)
+
+try:
+    from src.playwright_utils import install_playwright_browsers
+except (ImportError, ModuleNotFoundError):
+    try:
+        from playwright_utils import install_playwright_browsers
+    except:
+        def install_playwright_browsers(): pass # Placeholder if all fails
+
 install_playwright_browsers()
 
 from src.engine_logic import calculate_logic_price
@@ -48,7 +62,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.1.5"
+VERSION = "Rescue-v1.1.6"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
