@@ -25,7 +25,18 @@ class SmartCarScraper:
         if not PLAYWRIGHT_READY:
             return None
         try:
-            return playwright.chromium.launch(headless=self.headless)
+            return playwright.chromium.launch(
+                headless=self.headless,
+                args=[
+                    '--no-sandbox',
+                    '--disable-gpu',
+                    '--disable-dev-shm-usage',
+                    '--disable-setuid-sandbox',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--single-process'
+                ]
+            )
         except Exception as e:
             print(f"❌ Playwright Launch Failed: {e}")
             PLAYWRIGHT_READY = False

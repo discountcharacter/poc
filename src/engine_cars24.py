@@ -161,7 +161,18 @@ def get_cars24_price(make, model, year, variant, fuel, transmission, km, city):
     try:
         with sync_playwright() as p:
             try:
-                browser = p.chromium.launch(headless=True)
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--no-sandbox',
+                        '--disable-gpu',
+                        '--disable-dev-shm-usage',
+                        '--disable-setuid-sandbox',
+                        '--no-first-run',
+                        '--no-zygote',
+                        '--single-process'
+                    ]
+                )
             except Exception as e:
                 debug_log.append(f"Playwright Launch Failed: {e}")
                 return None, "\n".join(debug_log)

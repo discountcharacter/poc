@@ -62,7 +62,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.1.6"
+VERSION = "Rescue-v1.1.7"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
