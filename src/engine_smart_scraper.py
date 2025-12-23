@@ -8,6 +8,8 @@ import statistics
 import time
 from typing import List, Dict
 
+PLAYWRIGHT_READY = True  # Global circuit breaker
+
 class SmartCarScraper:
     """
     Intelligent scraper using Playwright to bypass anti-bot measures.
@@ -17,9 +19,23 @@ class SmartCarScraper:
     def __init__(self, headless: bool = True):
         self.headless = headless
         
+    def _safe_launch(self, playwright):
+        """Helper to safely launch browser with circuit breaker."""
+        global PLAYWRIGHT_READY
+        if not PLAYWRIGHT_READY:
+            return None
+        try:
+            return playwright.chromium.launch(headless=self.headless)
+        except Exception as e:
+            print(f"❌ Playwright Launch Failed: {e}")
+            PLAYWRIGHT_READY = False
+            return None
+
     def _get_page_content(self, url: str) -> str:
+        if not PLAYWRIGHT_READY: return ""
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
+            browser = self._safe_launch(p)
+            if not browser: return ""
             page = browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             try:
                 page.goto(url, wait_until="networkidle", timeout=30000)
@@ -39,10 +55,11 @@ class SmartCarScraper:
         model_slug = model.lower().replace(' ', '-')
         url = f"https://www.carwale.com/used/{make_slug}-{model_slug}-cars-in-{city_slug}/"
         
-        print(f"🔍 Scraping CarWale: {url}")
+        if not PLAYWRIGHT_READY: return []
         
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
+            browser = self._safe_launch(p)
+            if not browser: return []
             page = browser.new_page(user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
             listings = []
             
@@ -89,10 +106,11 @@ class SmartCarScraper:
         city_s = city.lower().replace(' ', '-')
         url = f"https://www.spinny.com/buy-used-{make_s}-{model_s}-cars-in-{city_s}/"
         
-        print(f"🔍 Scraping Spinny: {url}")
+        if not PLAYWRIGHT_READY: return []
         
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
+            browser = self._safe_launch(p)
+            if not browser: return []
             page = browser.new_page()
             listings = []
             try:
@@ -128,8 +146,8 @@ class SmartCarScraper:
 
     def get_market_data(self, make: str, model: str, year: int, 
                        fuel: str, city: str, km_driven: int) -> Dict:
-        if not PLAYWRIGHT_AVAILABLE:
-            return {'success': False, 'message': 'Playwright not available in this environment', 'count': 0}
+        if not PLAYWRIGHT_AVAILABLE or not PLAYWRIGHT_READY:
+            return {'success': False, 'message': 'Playwright (Live Search) is currently disabled or unavailable.', 'count': 0}
             
         all_listings = []
         all_listings.extend(self.scrape_carwale_listings(make, model, year, city))

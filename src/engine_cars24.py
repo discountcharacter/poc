@@ -160,7 +160,12 @@ def get_cars24_price(make, model, year, variant, fuel, transmission, km, city):
     
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            try:
+                browser = p.chromium.launch(headless=True)
+            except Exception as e:
+                debug_log.append(f"Playwright Launch Failed: {e}")
+                return None, "\n".join(debug_log)
+                
             context = browser.new_context()
             
             # Load saved cookies
