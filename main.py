@@ -3,9 +3,13 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
+from src.playwright_utils import install_playwright_browsers
 
 # Load environment variables (Server-side only)
 load_dotenv()
+
+# Initialize Playwright (Automatic install for Streamlit Cloud)
+install_playwright_browsers()
 
 from src.engine_logic import calculate_logic_price
 from src.engine_scout import fetch_market_prices
@@ -44,7 +48,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.1.4"
+VERSION = "Rescue-v1.1.5"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
