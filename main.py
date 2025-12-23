@@ -29,6 +29,7 @@ from src.engine_logic import calculate_logic_price
 from src.engine_scout import fetch_market_prices
 from src.engine_oracle import get_gemini_estimate
 from src.engine_sniper import fetch_closest_match
+from src.engine_research import get_market_estimate
 from src.engine_ml import get_ml_prediction
 from src.engine_smart_scraper import SmartCarScraper
 from src.ensemble_predictor import EnsemblePricePredictor
@@ -62,7 +63,7 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.1.7"
+VERSION = "Rescue-v1.1.8"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
@@ -376,6 +377,10 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
                 cars24_debug = f"Error: {str(e)}"
         elif not CARS24_SUPPORTED:
             cars24_debug = "Cars24 engine (Playwright) is not supported in this environment."
+            
+        # 9. Engine I: Validated Market Research (Strict Filter)
+        research_result = get_market_estimate(make, model, year, location)
+        research_price = research_result.get('median_price', 0) * 100000 if research_result['success'] else None
         
     # --- CONSENSUS CALCULATION (Robust IQR Method) ---
     engine_results = {
@@ -386,7 +391,8 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         "Scraper": smart_market_data['statistics']['median'] if smart_market_data.get('success') else 0, # Use smart_market_data here
         "Sniper": sniper_price,
         "ML Prediction": ml_price,
-        "Cars24": cars24_price # Use cars24_price here
+        "Cars24": cars24_price,
+        "Market Research": research_price
     }
     
     # Filter valid non-zero results
@@ -408,16 +414,17 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             filtered_prices = prices
             
         # Weighted Final Price
-        # Priorities: Ensemble (40%), Scraper (30%), Logic/Oracle/Sniper (10% each)
+        # Priorities: Market Research (35%), Ensemble (30%), Scraper (15%), Logic/Oracle/Sniper (10% total)
         weights = {
-            "Ensemble": 0.40,
-            "Scraper": 0.30,
-            "Logic": 0.10,
-            "Oracle": 0.10,
-            "Sniper": 0.10,
-            "Scout": 0.05, # Added default weights for other engines
-            "ML Prediction": 0.05,
-            "Cars24": 0.05
+            "Market Research": 0.35,
+            "Ensemble": 0.30,
+            "Scraper": 0.15,
+            "Logic": 0.05,
+            "Oracle": 0.05,
+            "Sniper": 0.05,
+            "Scout": 0.02,
+            "ML Prediction": 0.02,
+            "Cars24": 0.01
         }
         
         weighted_sum = 0
@@ -425,7 +432,7 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         
         for name, price in valid_results.items():
             if price in filtered_prices:
-                w = weights.get(name, 0.05) # Default weight for others
+                w = weights.get(name, 0.02)
                 weighted_sum += price * w
                 total_weight += w
         
@@ -466,9 +473,10 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         # This section is now redundant as the main metric is displayed above
         pass
              
-    # Breakdown Grid - 8 engines (2 rows of 4)
-    row1 = st.columns(4)
-    row2 = st.columns(4)
+    # Breakdown Grid - 9 engines (3 rows of 3)
+    row1 = st.columns(3)
+    row2 = st.columns(3)
+    row3 = st.columns(3)
     
     with row1[0]:
         st.markdown(f"""
@@ -507,20 +515,21 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         #      st.write(oracle_debug)
         #      st.markdown('</div>', unsafe_allow_html=True)
 
-    with row1[3]:
+    with row2[0]:
+        val_ml = format_currency(ml_price) if ml_price else "No Model data"
         st.markdown(f"""
-        <div class="metric-props" style="border-top: 3px solid #3B82F6; background: rgba(59, 130, 246, 0.05);">
-            <div class="metric-label" style="color: #2563EB">ENSEMBLE ML (SUPREME)</div>
-            <div class="metric-value" style="color: #1E40AF">{format_currency(ensemble_price)}</div>
+        <div class="metric-props">
+            <div class="metric-label">ML PREDICTION (BRAIN v1)</div>
+            <div class="metric-value" style="color: #9333ea">{val_ml}</div>
         </div>
         """, unsafe_allow_html=True)
-        with st.expander("Breakdown"):
-            st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-            st.write(f"Confidence: **{ensemble_result['confidence']}**")
-            st.json(ensemble_result['breakdown'])
-            st.markdown('</div>', unsafe_allow_html=True)
+        with st.expander("Model Data"):
+             st.markdown('<div class="debug-content">', unsafe_allow_html=True)
+             st.write(ml_debug)
+             st.write(f"Confidence: {int(ml_conf*100)}%")
+             st.markdown('</div>', unsafe_allow_html=True)
 
-    with row2[0]:
+    with row2[1]:
         st.markdown(f"""
         <div class="metric-props">
             <div class="metric-label">SMART SCRAPER</div>
@@ -536,7 +545,7 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
                 st.write(smart_market_data.get('message', 'No data'))
             st.markdown('</div>', unsafe_allow_html=True)
 
-    with row2[1]:
+    with row2[2]:
         val_sniper = format_currency(sniper_price) if sniper_price else "No Match"
         st.markdown(f"""
         <div class="metric-props">
@@ -549,21 +558,7 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
              st.write(sniper_debug)
              st.markdown('</div>', unsafe_allow_html=True)
 
-    with row2[2]:
-        val_ml = format_currency(ml_price) if ml_price else "No Model data"
-        st.markdown(f"""
-        <div class="metric-props">
-            <div class="metric-label">ML PREDICTION (BRAIN v1)</div>
-            <div class="metric-value" style="color: #9333ea">{val_ml}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        with st.expander("Model Data"):
-             st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-             st.write(ml_debug)
-             st.write(f"Confidence: {int(ml_conf*100)}%")
-             st.markdown('</div>', unsafe_allow_html=True)
-
-    with row2[3]:
+    with row3[0]:
         val_c24 = format_currency(cars24_price) if cars24_price else "N/A"
         st.markdown(f"""
         <div class="metric-props">
@@ -579,12 +574,44 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             elif not CARS24_SUPPORTED:
                 st.info("Desktop only feature")
             st.markdown('</div>', unsafe_allow_html=True)
+
+    with row3[1]:
+        st.markdown(f"""
+        <div class="metric-props" style="border-top: 3px solid #3B82F6; background: rgba(59, 130, 246, 0.05);">
+            <div class="metric-label" style="color: #2563EB">ENSEMBLE ML (SUPREME)</div>
+            <div class="metric-value" style="color: #1E40AF">{format_currency(ensemble_price)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        with st.expander("Breakdown"):
+            st.markdown('<div class="debug-content">', unsafe_allow_html=True)
+            st.write(f"Confidence: **{ensemble_result['confidence']}**")
+            st.json(ensemble_result['breakdown'])
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+    with row3[2]:
+        val_research = format_currency(research_price) if research_price else "No Data"
+        st.markdown(f"""
+        <div class="metric-props" style="border-top: 3px solid #10B981; background: rgba(16, 185, 129, 0.05);">
+            <div class="metric-label" style="color: #059669">MARKET RESEARCH (VALIDATED)</div>
+            <div class="metric-value" style="color: #047857">{val_research}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        with st.expander("Validated Listings"):
+            st.markdown('<div class="debug-content">', unsafe_allow_html=True)
+            if research_result['success']:
+                st.write(f"Found {research_result['count']} strictly validated listings.")
+                for l in research_result['listings']:
+                    st.write(f"- {l['year']} {l['title']} -> ₹{l['price']}L ({l['source']})")
+                st.write(f"Price Range: {research_result['price_range']}")
+            else:
+                st.write(research_result.get('message', 'No valid data'))
+            st.markdown('</div>', unsafe_allow_html=True)
     
     # 3. Chart
     st.markdown("### Consensus Graph")
     graph_data = pd.DataFrame({
-        "Source": ["Scraper", "Ensemble ML", "Depreciation", "Market Avg", "AI RAG", "ML Brain", "Sniper", "Cars24"],
-        "Value": [smart_market_price or 0, ensemble_price or 0, logic_price or 0, scout_price or 0, oracle_price or 0, ml_price or 0, sniper_price or 0, cars24_price or 0]
+        "Source": ["Scraper", "Ensemble ML", "Depreciation", "Market Avg", "AI RAG", "ML Brain", "Sniper", "Cars24", "Validated Research"],
+        "Value": [smart_market_price or 0, ensemble_price or 0, logic_price or 0, scout_price or 0, oracle_price or 0, ml_price or 0, sniper_price or 0, cars24_price or 0, research_price or 0]
     }).set_index("Source")
     
     st.bar_chart(graph_data, color="#2563EB")
