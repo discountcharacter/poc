@@ -393,28 +393,28 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         research_result = get_market_estimate(make, model, year, location)
         research_price = research_result.get('median_price', 0) * 100000 if research_result['success'] else None
         
-    # 9. Engine J: Transaction Prisms (The Real Truth)
-    # Using historical closed deals from user data
-    transaction_price = 0
-    transaction_conf = "Low"
-    transaction_data = None # Explicit initialization
+        # 10. Engine J: Transaction Prisms (The Real Truth)
+        # Using historical closed deals from user data
+        transaction_price = 0
+        transaction_conf = "Low"
+        transaction_data = None # Explicit initialization
 
-    try:
-        from src.engine_transaction import TransactionCompEngine
-        @st.cache_resource
-        def get_transaction_engine():
-            return TransactionCompEngine()
-        
-        trans_engine = get_transaction_engine()
-        t_result = trans_engine.get_valuation(make, model, year, variant, km)
-        
-        if t_result and t_result['price']:
-            transaction_price = int(t_result['price'])
-            transaction_conf = t_result['confidence']
-            transaction_data = t_result # Correct assignment
-    except Exception as e:
-        print(f"Transaction Engine Failed: {e}")
-        transaction_data = {"error": str(e)}
+        try:
+            from src.engine_transaction import TransactionCompEngine
+            @st.cache_resource
+            def get_transaction_engine():
+                return TransactionCompEngine()
+            
+            trans_engine = get_transaction_engine()
+            t_result = trans_engine.get_valuation(make, model, year, variant, km)
+            
+            if t_result and t_result['price']:
+                transaction_price = int(t_result['price'])
+                transaction_conf = t_result['confidence']
+                transaction_data = t_result # Correct assignment
+        except Exception as e:
+            print(f"Transaction Engine Failed: {e}")
+            transaction_data = {"error": str(e)}
 
     # --- CONSENSUS CALCULATION (Robust IQR Method) ---
     engine_results = {
