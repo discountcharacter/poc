@@ -74,8 +74,8 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-# CRITICAL FIX: Trained on 15,000+ records (Commercial + User Data)
-VERSION = "Rescue-v1.2.6"
+# CRITICAL FIX: Added UI Metadata to verify Model Size (15MB vs 32MB)
+VERSION = "Rescue-v1.2.7"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
@@ -377,6 +377,7 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         }
         ensemble_result = ensemble_predictor.predict(car_info, smart_market_data)
         ensemble_price = int(ensemble_result['final_price'] * 100000)
+        ensemble_meta = ensemble_result.get('meta', {})
         
         # 8. Engine F: Cars24 (Browser Automation)
         cars24_price = None
@@ -625,6 +626,9 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             st.markdown('<div class="debug-content">', unsafe_allow_html=True)
             st.write(f"Confidence: **{ensemble_result['confidence']}**")
             st.json(ensemble_result['breakdown'])
+            if 'meta' in ensemble_result:
+                st.caption("Model Meta:")
+                st.json(ensemble_result['meta'])
             st.markdown('</div>', unsafe_allow_html=True)
             
     with row3[2]:

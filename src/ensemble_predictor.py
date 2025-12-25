@@ -238,8 +238,22 @@ class EnsemblePricePredictor:
             'final_price': round(final_price, 2),
             'breakdown': predictions,
             'confidence': 'High' if len(predictions) >= 2 else 'Medium',
-            'models_used': list(predictions.keys())
+            'models_used': list(predictions.keys()),
+            'meta': self._get_model_metadata()
         }
+
+    def _get_model_metadata(self):
+        """Debug: Return file size/date of loaded models"""
+        try:
+            p = f"{self.models_path}/rf.pkl"
+            state = "Missing"
+            size = 0
+            if os.path.exists(p):
+                size = os.path.getsize(p) / (1024*1024) # MB
+                state = f"Active ({size:.1f} MB)"
+            return {'rf_size': f"{size:.1f} MB", 'state': state}
+        except:
+            return {'state': "Error"}
 
     def _fallback_estimate(self, car_data: Dict) -> Dict:
         """Rule-based estimate if ML fails."""
