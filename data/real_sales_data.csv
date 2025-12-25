@@ -1,4 +1,4 @@
-Make,Model,Variant,Colour,Kms Driven,Yr Of Mfg,Date Of Reg,Fuel Type,Transmission,Owner Type,Closing Price
+Make,Model,Variant,Color,Kms Driven,Yr Of Mfg,Date Of Reg,Fuel Type,Transmission,Owner,Closing Price
 Honda,City,S,Red,167980,1.2016,20.04.2016,Petrol,MT,1st,260000
 MG,Windsor,EXCLUSIVE,WHITE,7242,11/11/2024,10/01/2025,Electrical,AT,1st,1120000
 Mahindra,Thar,LX 2WD,E WHITE,47715,5.2023,16.06.2023,Diesel,MT,1st,900000
@@ -104,17 +104,4 @@ Toyota,Innova,V,CHAMPION MICA,363578,9.2008,21.01.2009,Diesel,MT,1st,160000
 Tata,Nexon,XMA 1.2 RTN,BLUE MOROCCAN,48223,11.2019,03.03.2020,Petrol,AT,1st,415000
 Maruti,Vitara Brezza,ZDI,Yellow,128538,10/01/1900,10.02.2018,Diesel,MT,1st,530000
 Hyundai,Creta,S+,WHITE,297927,10.2017,17.02.2018,Diesel,MT,1st,435000
-Honda,Mobilio,V,WHITE,124228,8.2014,08.12.2014,Petrol,MT,1st,225000
-Tata,Nexon Ev,XZ+,DYNGREY,52303,6.2023,24.07.2023,Electrical,AT,1st,725000
-Hyundai,i20 Active,SX,Brown,158785,5.2015,12.05.2015,Diesel,MT,1st,300000
-Mahindra,Thar,Cred,Black,52624,3.2019,16.07.2019,Diesel,MT,1st,490000
-Maruti,Swift Dzire,VDI,PERAL WHITE,115681,9.2016,19.12.2016,Diesel,MT,1st,325000
-Hyundai,Creta,1.5 EX,POLAR WHITE,43756,09 2020,31.10.2020,Petrol,MT,1st,715000
-Honda,City,VX,White,78830,5.2021,25.09.2021,Diesel,MT,2nd,850000
-Hyundai,i20,ASTA(o),WHITE,33471,9.2019,15.11.2019,Petrol,CVT,1st,515000
-MG,Hector Plus,SHARP,RED,38638,08/08/2020,24/11/2020,Petrol,DCT,1st,910000
-Honda,City,VX(O),RED,119564,1.2016,22.03.2016,Diesel,MT,1st,460000
-Volkswagen,Ameo,HIGHLINE,GREY,88809,4.2017,12.02.2018,Diesel,MT,1st,325000
-Maruti,Wagon R,ZXI,BROWN,18537,5.2019,14.06.2019,Petrol,MT,1st,345000
-Maruti,Baleno,ZETA,WHITE,68869,12.2016,20.07.2018,Diesel,MT,1st,360000
-Tata,Tigor,Xza+ 1.2 Rtn,COPPER,3255,2.2025,24.04.2025,Petrol,AT,1st,590000
+Honda,Mobilio,V,WHITE,124228,8.2014,08.12.2014,Petrol,MT

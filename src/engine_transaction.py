@@ -24,10 +24,20 @@ class TransactionCompEngine:
             # Year Parsing: handle "1.2016", "11/11/2024", "2016"
             def parse_year(val):
                 s = str(val)
-                # Try finding a 4-digit year 1990-2025
+                # Try finding a 4-digit year 1990-2029
                 match = re.search(r'(199\d|20[0-2]\d)', s)
                 if match:
                     return int(match.group(1))
+                
+                # Handle truncated years like "9.202" -> 2020 (common excel formatting issue)
+                match_trunc = re.search(r'(20[0-2])\b', s) # Matches 200, 201, 202
+                if match_trunc:
+                     # If it's 202, assume 2020. If 201, assume 2010? No, 2019?
+                     # Safest bet for "202" is 2020.
+                     y_part = match_trunc.group(1)
+                     if len(y_part) == 3:
+                         return int(y_part + "0")
+                
                 return None
             
             self.df['Year'] = self.df['Yr Of Mfg'].apply(parse_year)
