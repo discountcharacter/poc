@@ -397,6 +397,8 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
     # Using historical closed deals from user data
     transaction_price = 0
     transaction_conf = "Low"
+    transaction_data = None # Explicit initialization
+
     try:
         from src.engine_transaction import TransactionCompEngine
         @st.cache_resource
@@ -409,10 +411,10 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         if t_result and t_result['price']:
             transaction_price = int(t_result['price'])
             transaction_conf = t_result['confidence']
-            t_debug = t_result
+            transaction_data = t_result # Correct assignment
     except Exception as e:
         print(f"Transaction Engine Failed: {e}")
-        t_debug = f"Error: {e}"
+        transaction_data = {"error": str(e)}
 
     # --- CONSENSUS CALCULATION (Robust IQR Method) ---
     engine_results = {
