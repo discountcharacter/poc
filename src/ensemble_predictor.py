@@ -71,7 +71,9 @@ class EnsemblePricePredictor:
             df['km'] = df['km_driven']
         
         if 'km' in df.columns:
-            df['km_per_year'] = df['km'] / (df['age'] + 1)
+            # SAFETY FIX: Prevent division by zero if age is -1 (future car)
+            safe_age = df['age'].clip(lower=0)
+            df['km_per_year'] = df['km'] / (safe_age + 1)
         else:
             df['km'] = 50000
             df['km_per_year'] = 10000

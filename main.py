@@ -74,8 +74,8 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-# CRITICAL FIX: transaction_data must be initialized inside st.spinner() block
-VERSION = "Rescue-v1.2.3"
+# CRITICAL FIX: ML Models Retrained & Sniper Depreciation Logic Added
+VERSION = "Rescue-v1.2.5"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>

@@ -262,7 +262,7 @@ def fetch_closest_match(make, model, year, variant, km, city, api_key_search, se
             
         return score, ", ".join(details)
     
-    # Find best CarWale match
+     # Find best CarWale match
     best_carwale = None
     best_carwale_score = -1
     for cand in carwale_candidates:
@@ -284,12 +284,33 @@ def fetch_closest_match(make, model, year, variant, km, city, api_key_search, se
     
     # Build sources dict
     if best_carwale:
-        sources["carwale"] = {"price": best_carwale["price"], "url": best_carwale["url"]}
+        # P = P * (0.9 if year_listing > year else 1.0)
+        # We need listing year. Let's re-extract or store it earlier.
+        # Quick fix: re-extract from title since we didn't store it in candidates list earlier (can be improved)
+        p = best_carwale["price"]
+        title_years = year_pattern.findall(best_carwale["title"])
+        if title_years:
+            ly = int(title_years[0])
+            if ly > year:
+                p = int(p * 0.9) # 10% depreciation for 1 year newer
+                best_carwale["scoring_debug"] += " [Depreciated 10%]"
+        
+        sources["carwale"] = {"price": p, "url": best_carwale["url"]}
+        best_carwale["price"] = p # Update for overall compare
     else:
         sources["carwale"] = {"price": None, "url": carwale_url}
         
     if best_spinny:
-        sources["spinny"] = {"price": best_spinny["price"], "url": best_spinny["url"]}
+        p = best_spinny["price"]
+        title_years = year_pattern.findall(best_spinny["title"])
+        if title_years:
+            ly = int(title_years[0])
+            if ly > year:
+                p = int(p * 0.9)
+                best_spinny["scoring_debug"] += " [Depreciated 10%]"
+                
+        sources["spinny"] = {"price": p, "url": best_spinny["url"]}
+        best_spinny["price"] = p
     else:
         sources["spinny"] = {"price": None, "url": spinny_url}
     
