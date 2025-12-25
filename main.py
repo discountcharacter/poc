@@ -393,21 +393,43 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         research_result = get_market_estimate(make, model, year, location)
         research_price = research_result.get('median_price', 0) * 100000 if research_result['success'] else None
         
+    # 9. Engine J: Transaction Prisms (The Real Truth)
+    # Using historical closed deals from user data
+    transaction_price = 0
+    transaction_conf = "Low"
+    try:
+        from src.engine_transaction import TransactionCompEngine
+        @st.cache_resource
+        def get_transaction_engine():
+            return TransactionCompEngine()
+        
+        trans_engine = get_transaction_engine()
+        t_result = trans_engine.get_valuation(make, model, year, variant, km)
+        
+        if t_result and t_result['price']:
+            transaction_price = int(t_result['price'])
+            transaction_conf = t_result['confidence']
+            t_debug = t_result
+    except Exception as e:
+        print(f"Transaction Engine Failed: {e}")
+        t_debug = f"Error: {e}"
+
     # --- CONSENSUS CALCULATION (Robust IQR Method) ---
     engine_results = {
         "Logic": logic_price,
         "Scout": scout_price,
         "Oracle": oracle_price,
-        "Ensemble": ensemble_result.get('final_price', 0), # Use ensemble_result here
-        "Scraper": smart_market_data['statistics']['median'] if smart_market_data.get('success') else 0, # Use smart_market_data here
+        "Ensemble": ensemble_result.get('final_price', 0),
+        "Scraper": smart_market_data['statistics']['median'] if smart_market_data.get('success') else 0,
         "Sniper": sniper_price,
         "ML Prediction": ml_price,
         "Cars24": cars24_price,
-        "Market Research": research_price
+        "Market Research": research_price,
+        "Transaction": transaction_price
     }
     
     # Filter valid non-zero results
-    valid_results = {k: v for k, v in engine_results.items() if v and v > 0} # Ensure v is not None and > 0
+    valid_results = {k: v for k, v in engine_results.items() if v and v > 0} 
     
     if not valid_results:
         final_price = 0
@@ -419,17 +441,17 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             iqr = q3 - q1
             lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
             filtered_prices = [p for p in prices if lower <= p <= upper]
-            # If everything is filtered (shouldn't happen), fallback to original list
             if not filtered_prices: filtered_prices = prices
         else:
             filtered_prices = prices
             
         # Weighted Final Price
-        # Priorities: Market Research (35%), Ensemble (30%), Scraper (15%), Logic/Oracle/Sniper (10% total)
+        # Priorities: Transaction (High Confidence) -> Market Research -> Ensemble
         weights = {
-            "Market Research": 0.35,
-            "Ensemble": 0.30,
-            "Scraper": 0.15,
+            "Transaction": 0.60 if transaction_conf == "High" else 0.40,
+            "Market Research": 0.25,
+            "Ensemble": 0.20,
+            "Scraper": 0.10,
             "Logic": 0.05,
             "Oracle": 0.05,
             "Sniper": 0.05,
@@ -490,15 +512,23 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
     row3 = st.columns(3)
     
     with row1[0]:
+        val_trans = format_currency(transaction_price) if transaction_price else "No History"
+        # Color coding based on confidence
+        t_color = "#16a34a" if transaction_conf == "High" else "#ca8a04"
         st.markdown(f"""
-        <div class="metric-props">
-            <div class="metric-label">LOGIC (REAL BASE)</div>
-            <div class="metric-value">{format_currency(logic_price)}</div>
+        <div class="metric-props" style="border-top: 3px solid {t_color}; background: rgba(34, 197, 94, 0.05);">
+            <div class="metric-label" style="color: {t_color}">TRANSACTION COMP (REAL)</div>
+            <div class="metric-value" style="color: {t_color}">{val_trans}</div>
         </div>
         """, unsafe_allow_html=True)
-        with st.expander("Details"):
+        with st.expander("Similar Sold Cars"):
             st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-            for l in logic_log: st.write(l)
+            if transaction_data and transaction_data.get('comps'):
+                st.caption(f"Confidence: {transaction_conf}")
+                for cmp in transaction_data['comps']:
+                    st.write(f"• {cmp['year']} {cmp['variant']} ({cmp['km']}km) -> ₹{format_currency(cmp['price'])}")
+            else:
+                st.write("No direct transaction matches found.")
             st.markdown('</div>', unsafe_allow_html=True)
             
     with row1[1]:
@@ -520,11 +550,6 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
             <div class="metric-value">{format_currency(oracle_price)}</div>
         </div>
         """, unsafe_allow_html=True)
-        # Hiding AI Analysis details for team presentation
-        # with st.expander("AI Analysis"):
-        #      st.markdown('<div class="debug-content">', unsafe_allow_html=True)
-        #      st.write(oracle_debug)
-        #      st.markdown('</div>', unsafe_allow_html=True)
 
     with row2[0]:
         val_ml = format_currency(ml_price) if ml_price else "No Model data"
@@ -621,8 +646,8 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
     # 3. Chart
     st.markdown("### Consensus Graph")
     graph_data = pd.DataFrame({
-        "Source": ["Scraper", "Ensemble ML", "Depreciation", "Market Avg", "AI RAG", "ML Brain", "Sniper", "Cars24", "Validated Research"],
-        "Value": [smart_market_price or 0, ensemble_price or 0, logic_price or 0, scout_price or 0, oracle_price or 0, ml_price or 0, sniper_price or 0, cars24_price or 0, research_price or 0]
+        "Source": ["Scraper", "Ensemble ML", "Transaction Comp", "Market Avg", "AI RAG", "ML Brain", "Sniper", "Cars24", "Validated Research"],
+        "Value": [smart_market_price or 0, ensemble_price or 0, transaction_price or 0, scout_price or 0, oracle_price or 0, ml_price or 0, sniper_price or 0, cars24_price or 0, research_price or 0]
     }).set_index("Source")
     
     st.bar_chart(graph_data, color="#2563EB")

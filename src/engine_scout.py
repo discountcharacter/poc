@@ -55,8 +55,9 @@ def fetch_market_prices(make, model, year, variant, km, api_key, cx, location, r
             for match in matches:
                 try:
                     val = float(match[0])
-                    # Basic sanity check: 1L to 500L (5 Cr)
-                    if 1.0 <= val <= 500.0: 
+                    # Basic sanity check: 1.5L to 500L (5 Cr)
+                    # Increased lower bound to filter out "Downpayment starts at 1 Lakh"
+                    if 1.5 <= val <= 500.0: 
                         actual_price = int(val * 100000)
                         
                         # Even stricter: If it's a non-luxury 2017 car, ₹96L is impossible.
