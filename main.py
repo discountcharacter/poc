@@ -74,7 +74,8 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-VERSION = "Rescue-v1.1.9"
+# CRITICAL FIX: transaction_data must be initialized inside st.spinner() block
+VERSION = "Rescue-v1.2.3"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
