@@ -74,8 +74,8 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-# CRITICAL FIX: ML Models Retrained & Sniper Depreciation Logic Added
-VERSION = "Rescue-v1.2.5"
+# CRITICAL FIX: Trained on 15,000+ records (Commercial + User Data)
+VERSION = "Rescue-v1.2.6"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
