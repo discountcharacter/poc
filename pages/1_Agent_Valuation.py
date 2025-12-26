@@ -124,20 +124,32 @@ if st.button("Consult Oracle Agent", type="primary", use_container_width=True):
                 else:
                     st.markdown(f'<div class="main-metric">{fmt_price}</div>', unsafe_allow_html=True)
                     
-                    # PROCUREMENT ALGO (Lower Range)
-                    # aggressive: 35% margin (65% of retail) -> Buy
-                    # safe: 20% margin (80% of retail) -> Trade
-                    buy_low = market_price * 0.65
-                    buy_high = market_price * 0.80
+                    # PROCUREMENT ALGO (Precision Lower Range)
+                    from src.procurement_algo import ProcurementAlgo
+                    
+                    market_price_val = int(market_price)
+                    proc_res = ProcurementAlgo.calculate_procurement_price(
+                        market_price_val, make, model, year, km, owners, condition
+                    )
+                    
+                    buy_price = proc_res['final_procurement_price']
+                    
+                    # Create a range around the Calculated Buy Price
+                    # e.g. Buy Price +/- 5%
+                    buy_low = buy_price * 0.95
+                    buy_high = buy_price * 1.05
                     
                     st.markdown("---")
-                    st.caption("RECOMMENDED BUYING RANGE (Procurement)")
+                    st.caption("RECOMMENDED PROCUREMENT PRICE (Precision Algo)")
                     st.markdown(
                         f"<div style='font-size: 2rem; font-weight: 700; color: #3B82F6'>"
                         f"₹ {buy_low:,.0f} - ₹ {buy_high:,.0f}</div>", 
                         unsafe_allow_html=True
                     )
-                    st.info(f"Targeting 20-35% margin below Market Retail (₹ {market_price/100000:.2f}L).")
+                    
+                    st.info(f"Basis: {proc_res['details']}. Deductions applied for Condition & Ownership.")
+                    with st.expander("View Algo Breakdown"):
+                        st.json(proc_res)
                 
                 valid_count = len(result.get('valid_listings', []))
                 rejected_count = result.get('rejected_count', 0)
