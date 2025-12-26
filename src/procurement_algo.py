@@ -68,8 +68,15 @@ class ProcurementAlgo:
         expected_km = age * segment_data["km_limit"]
         actual_km = int(km) if km else expected_km
         
+        # Excess KM Penalty
         extra_km = max(0, actual_km - expected_km)
         km_penalty = extra_km * segment_data["km_dep"]
+        
+        # Low KM Appreciation (Bonus)
+        # If car has run LESS than expected, dealers pay a premium.
+        # We apply a conservative bonus: 30% of the depreciation rate for every saved km.
+        saved_km = max(0, expected_km - actual_km)
+        km_bonus = saved_km * (segment_data["km_dep"] * 0.30)
         
         # 3. Ownership Depreciation
         # 2nd Owner: -2% of Base
@@ -89,8 +96,15 @@ class ProcurementAlgo:
         cond_penalty = base_procurement * cond_penalty_pct
         
         # Final Calculation
-        final_procurement = base_procurement - km_penalty - owner_penalty - cond_penalty
+        # Base - Penalties + Bonus
+        final_procurement = base_procurement - km_penalty - owner_penalty - cond_penalty + km_bonus
         
+        details_msg = f"Segment: {segment_name} | Expected KM: {expected_km}"
+        if extra_km > 0:
+            details_msg += f" | Extra KM: {extra_km} @ ₹{segment_data['km_dep']}/km"
+        if saved_km > 0:
+            details_msg += f" | Low KM Bonus: {saved_km} km (Credit ₹{int(km_bonus)})"
+
         return {
             "market_price": market_price,
             "base_procurement": int(base_procurement),
@@ -98,10 +112,11 @@ class ProcurementAlgo:
             "penalties": {
                 "km_penalty": int(km_penalty),
                 "owner_penalty": int(owner_penalty),
-                "cond_penalty": int(cond_penalty)
+                "cond_penalty": int(cond_penalty),
+                "km_bonus": int(km_bonus)
             },
             "final_procurement_price": int(final_procurement),
-            "details": f"Segment: {segment_name} | Expected KM: {expected_km} | Extra KM: {extra_km} @ ₹{segment_data['km_dep']}/km"
+            "details": details_msg
         }
 
 if __name__ == "__main__":
