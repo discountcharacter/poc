@@ -74,13 +74,19 @@ with st.sidebar:
 # Input Grid
 col1, col2, col3 = st.columns(3)
 with col1:
-    make = st.selectbox("Make", ["Maruti", "Hyundai", "Honda", "Tata", "Mahindra", "Kia", "Toyota", "MG"], index=1)
-    year = st.selectbox("Year", range(2025, 2010, -1), index=5)
+    make_options = ["Maruti", "Hyundai", "Honda", "Tata", "Mahindra", "Kia", "Toyota", "MG", "Volkswagen", "Renault", "Ford", "Skoda", "Nissan", "Other"]
+    make_input = st.selectbox("Make", make_options, index=1)
+    if make_input == "Other":
+        make = st.text_input("Enter Custom Make", value="Volvo")
+    else:
+        make = make_input
+        
+    year = st.selectbox("Year", range(2025, 2005, -1), index=5)
     variant = st.text_input("Variant", value="SX Petrol")
 with col2:
     model = st.text_input("Model", value="Creta")
     fuel = st.selectbox("Fuel", ["Petrol", "Diesel", "CNG", "Electric"], index=0)
-    km = st.number_input("Odometer (KM)", min_value=0, max_value=200000, value=50000, step=1000)
+    km = st.number_input("Odometer (KM)", min_value=0, max_value=1000000, value=50000, step=1000)
 with col3:
     location = st.text_input("Location", value="Hyderabad")
     owners = st.selectbox("Owners", [1, 2, 3, 4], index=0)
