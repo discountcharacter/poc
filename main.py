@@ -74,8 +74,8 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-# CRITICAL FIX: Market Search (Scout) Strict Model Matching & Anti-Comparison Filter
-VERSION = "Rescue-v1.2.8"
+# CRITICAL FIX: Disabled Scout (Market Search) Engine due to poor relevance
+VERSION = "Rescue-v1.2.9"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>
@@ -339,8 +339,10 @@ def run_valuation(make, model, year, variant, km, condition, owners, fuel, locat
         # 2. Logic
         logic_price, logic_log = calculate_logic_price(make, model, year, variant, km, condition, owners, location, remarks, search_key, cx)
 
-        # 3. Scout
-        scout_price, scout_data = fetch_market_prices(make, model, year, variant, km, search_key, cx, location, remarks)
+        # 3. Scout (DISABLED BY USER REQUEST due to poor relevance)
+        # scout_price, scout_data = fetch_market_prices(make, model, year, variant, km, search_key, cx, location, remarks)
+        scout_price = None
+        scout_data = []
         
         # 4. Engine E: ML Predictor (The Brain)
         ml_price, ml_conf, ml_debug = get_ml_prediction(make, model, year, variant, km, location)
