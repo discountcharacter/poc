@@ -140,7 +140,7 @@ class ValuationAgent:
 
     def _call_gemini_rest(self, prompt):
         """
-        Raw REST API call to Gemini Pro.
+        Raw REST API call to Gemini Pro with Retry logic.
         """
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:generateContent?key={self.gemini_key}"
         headers = {'Content-Type': 'application/json'}
@@ -150,18 +150,27 @@ class ValuationAgent:
             }]
         }
         
-        try:
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
-            if response.status_code != 200:
-                print(f"Gemini API Error {response.status_code}: {response.text}")
-                return None
-                
-            data = response.json()
-            # Extract text: candidates[0].content.parts[0].text
-            return data['candidates'][0]['content']['parts'][0]['text']
-        except Exception as e:
-            print(f"Gemini REST Error: {e}")
-            return None
+        for attempt in range(3):
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=30)
+                if response.status_code == 200:
+                    data = response.json()
+                    # Check if candidates exist (Safety filters can block response)
+                    if not data.get('candidates'):
+                        print(f"Gemini Safety/Block Error: {data}")
+                        return f"Error: Model blocked response. Safety/Other reason. Raw: {json.dumps(data)}"
+                    return data['candidates'][0]['content']['parts'][0]['text']
+                else:
+                    print(f"Gemini API Error {response.status_code}: {response.text}")
+                    if response.status_code >= 500:
+                        time.sleep(1) # Retry on server error
+                        continue
+                    return f"Error: API {response.status_code} - {response.text}"
+            except Exception as e:
+                print(f"Gemini REST Exception: {e}")
+                time.sleep(1)
+        
+        return "Error: Failed after 3 attempts."
 
 def raw_listings_str(listings):
     return "\n---\n".join([f"Item {i+1}: {t.replace(chr(10), ' ')}" for i, t in enumerate(listings)])
