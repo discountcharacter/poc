@@ -74,8 +74,8 @@ st.set_page_config(
 )
 
 # Modern Futuristic Light Mode CSS
-# CRITICAL FIX: Added UI Metadata to verify Model Size (15MB vs 32MB)
-VERSION = "Rescue-v1.2.7"
+# CRITICAL FIX: Market Search (Scout) Strict Model Matching & Anti-Comparison Filter
+VERSION = "Rescue-v1.2.8"
 st.caption(f"Engine Build: {VERSION}")
 st.markdown("""
 <style>

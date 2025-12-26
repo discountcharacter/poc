@@ -54,6 +54,18 @@ def fetch_market_prices(make, model, year, variant, km, api_key, cx, location, r
             
             for match in matches:
                 try:
+                    # STRICT RELEVANCE CHECK
+                    title_lower = title.lower()
+                    model_lower = model.lower()
+                    
+                    # 1. Must contain Model name
+                    if model_lower not in title_lower:
+                        continue
+                        
+                    # 2. Exclude comparisons and reviews
+                    if " vs " in title_lower or "compare" in title_lower or "review" in title_lower:
+                        continue
+                        
                     val = float(match[0])
                     # Basic sanity check: 1.5L to 500L (5 Cr)
                     # Increased lower bound to filter out "Downpayment starts at 1 Lakh"
