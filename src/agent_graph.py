@@ -54,9 +54,10 @@ class ValuationAgent:
                 if "items" in data:
                     for item in data["items"]:
                         title = item.get("title", "")
+                        link = item.get("link", "")
                         snippet = item.get("snippet", "")
-                        # Combine for context
-                        raw_listings.append(f"Title: {title}\nSnippet: {snippet}")
+                        # Combine for context with Link
+                        raw_listings.append(f"Title: {title}\nLink: {link}\nSnippet: {snippet}")
                 
                 time.sleep(0.5) 
             except Exception as e:
@@ -100,22 +101,20 @@ class ValuationAgent:
            - Match Variant logic (e.g. "SX" matches "SX 1.5").
            - IGNORE completely irrelevant results.
         
-        2. Extract the price for each valid listing.
+        2. Extract the PRICE and LINK (URL) for each valid listing.
         
-        3. CALCULATE THE FINAL ESTIMATED VALUE based on the median of valid listings, BUT ADJUST IT based on the specific condition of my car:
-           - If my car has LOW KM compared to market -> INCREASE value.
-           - If my car has HIGH KM -> DECREASE value.
-           - If Remarks say "Accident" -> DECREASE value significanty.
-           - If Fuel type matches strictly -> Prioritize those prices.
+        3. CALCULATE THE "MARKET RETAIL PRICE" (What dealers sell for).
+           - Median of valid listings.
+           - Adjust for Odometer/Condition (High KM = Lower Value).
         
         OUTPUT FORMAT (JSON ONLY):
         {{
             "valid_listings": [
-                {{"title": "...", "price": 1050000, "source": "CarWale", "reason": "Strong Match"}}
+                {{"title": "...", "price": 1050000, "link": "https://...", "source": "CarWale", "reason": "Strong Match"}}
             ],
             "rejected_count": 5,
-            "estimated_price": 1050000,
-            "reasoning": "Found 3 matches. Adjusted price down by 5% due to high odometer (80k km) compared to market average."
+            "market_price": 1050000,
+            "reasoning": "Found 3 matches. Market Ask is ~10.5L. Adjusted down for 80k km."
         }}
         """
         

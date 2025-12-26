@@ -109,18 +109,35 @@ if st.button("Consult Oracle Agent", type="primary", use_container_width=True):
             
             # --- Main Display ---
             st.markdown("---")
-            c1, c2 = st.columns([1, 2])
+            c1, c2 = st.columns([1, 1.5])
             
             with c1:
                 st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.caption("ESTIMATED MARKET VALUE")
-                price = result.get('estimated_price', 0)
-                fmt_price = f"₹ {price:,.0f}" if price > 0 else "N/A"
-                if price == 0:
+                st.caption("MARKET RETAIL PRICE (High Range)")
+                # Support both keys during transition
+                market_price = result.get('market_price') or result.get('estimated_price', 0)
+                
+                fmt_price = f"₹ {market_price:,.0f}" if market_price > 0 else "N/A"
+                if market_price == 0:
                     st.markdown(f'<div class="main-metric" style="color: #EF4444">{fmt_price}</div>', unsafe_allow_html=True)
-                    st.warning("No valid listings found matching strict criteria.")
+                    st.warning("No valid listings found.")
                 else:
                     st.markdown(f'<div class="main-metric">{fmt_price}</div>', unsafe_allow_html=True)
+                    
+                    # PROCUREMENT ALGO (Lower Range)
+                    # aggressive: 35% margin (65% of retail) -> Buy
+                    # safe: 20% margin (80% of retail) -> Trade
+                    buy_low = market_price * 0.65
+                    buy_high = market_price * 0.80
+                    
+                    st.markdown("---")
+                    st.caption("RECOMMENDED BUYING RANGE (Procurement)")
+                    st.markdown(
+                        f"<div style='font-size: 2rem; font-weight: 700; color: #3B82F6'>"
+                        f"₹ {buy_low:,.0f} - ₹ {buy_high:,.0f}</div>", 
+                        unsafe_allow_html=True
+                    )
+                    st.info(f"Targeting 20-35% margin below Market Retail (₹ {market_price/100000:.2f}L).")
                 
                 valid_count = len(result.get('valid_listings', []))
                 rejected_count = result.get('rejected_count', 0)
@@ -134,11 +151,30 @@ if st.button("Consult Oracle Agent", type="primary", use_container_width=True):
                 st.markdown(f'<div class="reasoning-text">{result.get("reasoning", "No reasoning provided.")}</div>', unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-            # Listings Table
+            # Listings Table with Links
             st.subheader("Traceability: Verified Listings")
-            if result.get('valid_listings'):
-                df = pd.DataFrame(result['valid_listings'])
-                st.dataframe(df, use_container_width=True, hide_index=True)
+            listings = result.get('valid_listings', [])
+            if listings:
+                # Convert to DF but make links clickable
+                df_data = []
+                for item in listings:
+                    link = item.get("link", "#")
+                    title = item.get("title", "Unknown")
+                    price = item.get("price", 0)
+                    # Streamlit LinkColumn format
+                    df_data.append({
+                        "Source": item.get("source", "Web"),
+                        "Title": title,
+                        "Price": f"₹ {price:,.0f}",
+                        "URL": link
+                    })
+                
+                st.dataframe(
+                    pd.DataFrame(df_data), 
+                    column_config={"URL": st.column_config.LinkColumn("Evidence Link")},
+                    use_container_width=True, 
+                    hide_index=True
+                )
             else:
                 st.info("No listings passed the strict Agent verification filter.")
 
