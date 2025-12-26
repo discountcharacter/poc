@@ -3,7 +3,7 @@ import time
 import requests
 import json
 import re
-from playwright.sync_api import sync_playwright
+
 from dotenv import load_dotenv
 
 load_dotenv()
