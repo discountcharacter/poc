@@ -18,14 +18,16 @@ class ValuationAgent:
         self.search_key = search_key or os.getenv("GOOGLE_SEARCH_API_KEY")
         self.cx = cx or os.getenv("SEARCH_ENGINE_ID")
 
-    def search_market(self, make, model, year, variant, location):
+    def search_market(self, make, model, year, variant, location, km=None, fuel=None, owners=None, condition=None, remarks=None):
         """
         Orchestrates the browsing and reasoning process using APIs.
         """
         if not self.gemini_key: return {"error": "Missing Gemini API Key"}
         if not self.search_key or not self.cx: return {"error": "Missing Google Search API Key/CX"}
 
-        print(f"🤖 Agent: Searching for {year} {make} {model} {variant} in {location}...")
+        details = f"{year} {make} {model} {variant}"
+        if fuel: details += f" {fuel}"
+        print(f"🤖 Agent: Searching for {details} in {location}...")
         
         # 1. Browse (Google Custom Search API)
         queries = [
@@ -66,10 +68,10 @@ class ValuationAgent:
         if not raw_listings:
              return {"error": "No listings found on Google Search."}
              
-        analysis = self._filter_with_llm(raw_listings, make, model, year, variant, location)
+        analysis = self._filter_with_llm(raw_listings, make, model, year, variant, location, km, fuel, owners, condition, remarks)
         return analysis
 
-    def _filter_with_llm(self, raw_data, make, model, year, variant, location):
+    def _filter_with_llm(self, raw_data, make, model, year, variant, location, km, fuel, owners, condition, remarks):
         """
         Sends raw scraped text to Gemini REST API to extract TRUE listings.
         """
@@ -82,19 +84,29 @@ class ValuationAgent:
         Year: {year}
         Variant: {variant}
         Location: {location}
+        Fuel: {fuel}
+        Odometer: {km} km
+        Owners: {owners}
+        Condition: {condition}
+        Remarks: {remarks}
         
         Raw Search Results (Scraped Text):
         {raw_listings_str(raw_data)}
         
         YOUR TASK:
         1. Identify listings that match the Target Vehicle REASONABLY WELL. 
-           - Match Year within +/- 1 year if price is reasonable.
+           - Match Year within +/- 1 year.
            - Match Model (Must be {model}).
-           - Match Variant logic (e.g. "SX" matches "SX 1.5", "SX Manual").
-           - Allow "Petrol" to match generic listings if not explicitly "Diesel".
-        2. IGNORE completely irrelevant results (e.g. "Aura", "Venue", "Review", "Compare", "New Car Price").
-        3. Extract the price for each valid listing.
-        4. Calculate the median price of valid listings.
+           - Match Variant logic (e.g. "SX" matches "SX 1.5").
+           - IGNORE completely irrelevant results.
+        
+        2. Extract the price for each valid listing.
+        
+        3. CALCULATE THE FINAL ESTIMATED VALUE based on the median of valid listings, BUT ADJUST IT based on the specific condition of my car:
+           - If my car has LOW KM compared to market -> INCREASE value.
+           - If my car has HIGH KM -> DECREASE value.
+           - If Remarks say "Accident" -> DECREASE value significanty.
+           - If Fuel type matches strictly -> Prioritize those prices.
         
         OUTPUT FORMAT (JSON ONLY):
         {{
@@ -103,7 +115,7 @@ class ValuationAgent:
             ],
             "rejected_count": 5,
             "estimated_price": 1050000,
-            "reasoning": "Found 3 matches. Accepted 'SX 1.5' as valid variant."
+            "reasoning": "Found 3 matches. Adjusted price down by 5% due to high odometer (80k km) compared to market average."
         }}
         """
         

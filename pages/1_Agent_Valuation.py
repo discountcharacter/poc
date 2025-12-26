@@ -76,20 +76,30 @@ col1, col2, col3 = st.columns(3)
 with col1:
     make = st.selectbox("Make", ["Maruti", "Hyundai", "Honda", "Tata", "Mahindra", "Kia", "Toyota", "MG"], index=1)
     year = st.selectbox("Year", range(2025, 2010, -1), index=5)
+    variant = st.text_input("Variant", value="SX Petrol")
 with col2:
     model = st.text_input("Model", value="Creta")
-    variant = st.text_input("Variant", value="SX Petrol")
+    fuel = st.selectbox("Fuel", ["Petrol", "Diesel", "CNG", "Electric"], index=0)
+    km = st.number_input("Odometer (KM)", min_value=0, max_value=200000, value=50000, step=1000)
 with col3:
     location = st.text_input("Location", value="Hyderabad")
+    owners = st.selectbox("Owners", [1, 2, 3, 4], index=0)
+    condition = st.selectbox("Condition", ["Excellent", "Good", "Fair", "Poor"], index=1)
+
+remarks = st.text_area("Additional Remarks", placeholder="E.g. Sunroof, New Tyres...", height=70)
 
 st.markdown("---")
 
 if st.button("Consult Oracle Agent", type="primary", use_container_width=True):
-    agent = ValuationAgent(gemini_key)
+    # Retrieve keys from env 
+    search_key = os.getenv("GOOGLE_SEARCH_API_KEY")
+    cx = os.getenv("SEARCH_ENGINE_ID")
+    
+    agent = ValuationAgent(gemini_key, search_key, cx)
     
     with st.status("🤖 Agent is working...", expanded=True) as status:
-        st.write(f"1. Browsing market for **{year} {make} {model} {variant}** in **{location}**...")
-        result = agent.search_market(make, model, year, variant, location)
+        st.write(f"1. Browsing market for **{year} {make} {model} {variant} ({fuel})** in **{location}**...")
+        result = agent.search_market(make, model, year, variant, location, km, fuel, owners, condition, remarks)
         
         if "error" in result:
             status.update(label="Agent Failed", state="error", expanded=True)
