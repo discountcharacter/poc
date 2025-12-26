@@ -10,8 +10,8 @@ load_dotenv()
 
 class ValuationAgent:
     """
-    Rescue-v2.0: The Oracle Agent
-    Browses live markets via Playwright and uses LLM (Gemini REST API) to verify data.
+    Rescue-v2.0: Automated Market Analysis
+    Browses live markets via Custom Search and uses LLM (Gemini REST API) to verify data.
     """
     def __init__(self, gemini_key, search_key=None, cx=None):
         self.gemini_key = gemini_key or os.getenv("GOOGLE_API_KEY")
@@ -122,20 +122,34 @@ class ValuationAgent:
         if not result_text:
             return {"error": "LLM returned empty response", "raw_listings": len(raw_data)}
             
+        if result_text.startswith("Error"):
+             return {"error": result_text, "reasoning": "LLM failed to generate a response."}
+
         try:
-            # Clean json block
-            txt = result_text
-            match = re.search(r"```json\n(.*?)\n```", txt, re.DOTALL)
-            if match:
-                txt = match.group(1)
-            elif "```" in txt:
-                 match = re.search(r"```(.*?)```", txt, re.DOTALL)
-                 if match: txt = match.group(1)
+            # Clean json block - find the first outer { }
+            txt = result_text.strip()
+            
+            # Remove markdown if present
+            if "```" in txt:
+                match = re.search(r"```(?:json)?\n?(.*?)```", txt, re.DOTALL)
+                if match:
+                    txt = match.group(1).strip()
+            
+            # Fallback: Find first { and last }
+            start = txt.find("{")
+            end = txt.rfind("}")
+            if start != -1 and end != -1:
+                txt = txt[start:end+1]
             
             data = json.loads(txt)
             return data
         except Exception as e:
-            return {"error": f"LLM Parsing Failed: {e}", "raw_response": result_text}
+            print(f"Parsing FAILED on: {result_text}")
+            return {
+                "error": f"LLM Parsing Failed: {str(e)}", 
+                "raw_response": result_text,
+                "reasoning": "The AI Agent could not format the valuation data correctly. Please try again."
+            }
 
     def _call_gemini_rest(self, prompt):
         """

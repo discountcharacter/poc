@@ -14,7 +14,7 @@ load_dotenv()
 
 st.set_page_config(
     page_title="Agent-1: Intelligent Valuation",
-    page_icon="🤖",
+    page_icon="💼",
     layout="wide"
 )
 
@@ -51,8 +51,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🤖 Agent-1: Intelligent Valuation Portal")
-st.markdown("### The Oracle Agent (Rescue-v2.0)")
+st.title("Agent-1: Intelligent Valuation Portal")
+st.markdown("### Automated Market Analysis (Rescue-v2.0)")
 
 # Sidebar Configuration
 with st.sidebar:
@@ -96,14 +96,14 @@ remarks = st.text_area("Additional Remarks", placeholder="E.g. Sunroof, New Tyre
 
 st.markdown("---")
 
-if st.button("Consult Oracle Agent", type="primary", use_container_width=True):
+if st.button("Consult Agent", type="primary", use_container_width=True):
     # Retrieve keys from env 
     search_key = os.getenv("GOOGLE_SEARCH_API_KEY")
     cx = os.getenv("SEARCH_ENGINE_ID")
     
     agent = ValuationAgent(gemini_key, search_key, cx)
     
-    with st.status("🤖 Agent is working...", expanded=True) as status:
+    with st.status("Agent is working...", expanded=True) as status:
         st.write(f"1. Browsing market for **{year} {make} {model} {variant} ({fuel})** in **{location}**...")
         result = agent.search_market(make, model, year, variant, location, km, fuel, owners, condition, remarks)
         
