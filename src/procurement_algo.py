@@ -55,15 +55,24 @@ class ProcurementAlgo:
         segment_name = ProcurementAlgo.get_segment(model)
         segment_data = ProcurementAlgo.SEGMENTS.get(segment_name, ProcurementAlgo.SEGMENTS["Premium Hatchback"])
         
-        # 1. Base Margin Integration
-        # We start with the Market Price (Retail). We need a base discount to get to "Ideal Procurement".
-        # Based on user data (Buy 3.45L vs Market 5.35L ~= 64%), we calibrate to 0.65.
-        base_factor = 0.65 
+        # 1. Base Margin Integration (Dynamic based on Age)
+        # New cars (0-2 yrs) retain high % of retail value (80%).
+        # Mid-age cars (3-5 yrs) retain moderate % (70%).
+        # Old cars (6+ yrs) follow standard depreciation (65%).
+        current_year = datetime.now().year
+        age = max(1, current_year - int(year))
+        
+        if age <= 2:
+            base_factor = 0.80
+        elif age <= 5:
+            base_factor = 0.70
+        else:
+            base_factor = 0.65
+            
         base_procurement = market_price * base_factor
         
         # 2. Age & KM Calculations
-        current_year = datetime.now().year
-        age = max(1, current_year - int(year))
+        # re-use age variable
         
         expected_km = age * segment_data["km_limit"]
         actual_km = int(km) if km else expected_km
