@@ -63,7 +63,7 @@ if st.session_state.stage == "input":
                 with st.spinner("🚀 Automating Cars24 Input... (This may take 30-60s)"):
                     try:
                         # Webhook 1
-                        url = "https://jaiswal007.app.n8n.cloud/webhook/car-details"
+                        url = "https://jaiswal007.app.n8n.cloud/webhook-test/car-details"
                         response = requests.post(url, json=payload, timeout=120)
                         
                         if response.status_code == 200:
