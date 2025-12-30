@@ -32,10 +32,13 @@ if st.session_state.stage == "input":
             model = st.text_input("Car Model", placeholder="e.g. Swift")
             year = st.selectbox("Year", range(2025, 2008, -1), index=4)
             variant = st.text_input("Variant", placeholder="e.g. VXI")
+            fuel = st.selectbox("Fuel Type", ["Petrol", "Diesel", "CNG", "Electric"])
         
         with col2:
+            transmission = st.selectbox("Transmission", ["Manual", "Automatic"])
             km = st.number_input("Kilometers Driven", min_value=0, max_value=200000, value=40000, step=1000)
-            state = st.text_input("Registration State/Location", value="DL")
+            state = st.text_input("State", placeholder="e.g. Delhi")
+            city = st.text_input("City", placeholder="e.g. New Delhi")
             mobile = st.text_input("Mobile Number", placeholder="9999999999")
         
         submitted = st.form_submit_button("Get OTP", type="primary", use_container_width=True)
@@ -49,8 +52,11 @@ if st.session_state.stage == "input":
                     "model": model,
                     "year": year,
                     "variant": variant,
+                    "fuel": fuel,
+                    "transmission": transmission,
                     "km": km,
                     "state": state,
+                    "city": city,
                     "mobile": mobile
                 }
                 
