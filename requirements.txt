@@ -8,5 +8,5 @@ joblib
 beautifulsoup4
 xgboost
 lightgbm
-
 numpy
+playwright
