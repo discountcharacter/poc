@@ -106,14 +106,18 @@ class ProcurementAlgo:
         
         # Final Calculation
         # Base - Penalties + Bonus
-        final_procurement = base_procurement - km_penalty - owner_penalty - cond_penalty + km_bonus
+        final_price = base_procurement + km_bonus - km_penalty - owner_penalty - cond_penalty
         
-        details_msg = f"Segment: {segment_name} | Expected KM: {expected_km}"
+        km_msg = ""
         if extra_km > 0:
-            details_msg += f" | Extra KM: {extra_km} @ ₹{segment_data['km_dep']}/km"
+            km_msg += f"Extra KM: {extra_km} @ ₹{segment_data['km_dep']}/km"
         if saved_km > 0:
-            details_msg += f" | Low KM Bonus: {saved_km} km (Credit ₹{int(km_bonus)})"
-
+            if km_msg: km_msg += " | "
+            km_msg += f"Low KM Bonus: {saved_km} km (Credit ₹{int(km_bonus)})"
+        
+        # Floor price at Scrap Value (approx 25k) to prevent negative results
+        final_price = max(25000, final_price)
+        
         return {
             "market_price": market_price,
             "base_procurement": int(base_procurement),
@@ -124,8 +128,8 @@ class ProcurementAlgo:
                 "cond_penalty": int(cond_penalty),
                 "km_bonus": int(km_bonus)
             },
-            "final_procurement_price": int(final_procurement),
-            "details": details_msg
+            "final_procurement_price": int(final_price),
+            "details": f"Segment: {segment_name} | Expected KM: {expected_km} | {km_msg}"
         }
 
 if __name__ == "__main__":
