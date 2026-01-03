@@ -35,68 +35,29 @@ class ValuationAgent:
 
     def _filter_with_llm(self, raw_data, make, model, year, variant, location, km, fuel, owners, condition, remarks):
         """
-        FORMULA-BASED MARKET PRICE CALCULATION (Deterministic - No AI/API calls)
-        This ensures the same car details always return the same price.
+        LIVE PRICE FETCHING + FORMULA CALCULATION
+        Step 1: Fetch NEW car base price from Google (with source URLs)
+        Step 2: Apply depreciation formula
         """
         from datetime import datetime
         import numpy as np
+        import re
         
-        # Base price lookup table (retail market prices in INR)
-        # This can be expanded as needed - formula will still work for unlisted cars
-        base_prices = {
-            # Maruti
-            ("maruti", "alto"): 280000,
-            ("maruti", "swift"): 550000,
-            ("maruti", "baleno"): 650000,
-            ("maruti", "wagon r"): 400000,
-            ("maruti", "dzire"): 600000,
-            ("maruti", "swift dzire"): 600000,
-            ("maruti", "vitara"): 850000,
-            ("maruti", "brezza"): 900000,
-            ("maruti", "ertiga"): 900000,
-            ("maruti", "ciaz"): 750000,
-            
-            # Hyundai
-            ("hyundai", "i10"): 400000,
-            ("hyundai", "grand"): 500000,
-            ("hyundai", "i20"): 700000,
-            ("hyundai", "venue"): 1000000,
-            ("hyundai", "creta"): 1400000,
-            ("hyundai", "verna"): 1100000,
-            
-            # Honda
-            ("honda", "city"): 1200000,
-            ("honda", "amaze"): 750000,
-            ("honda", "jazz"): 750000,
-            ("honda", "wr-v"): 900000,
-            
-            # Tata
-            ("tata", "tiago"): 500000,
-            ("tata", "tigor"): 650000,
-            ("tata", "nexon"): 1000000,
-            ("tata", "harrier"): 1800000,
-            
-            # Mahindra
-            ("mahindra", "xuv500"): 1600000,
-            ("mahindra", "xuv700"): 2000000,
-            ("mahindra", "scorpio"): 1400000,
-            ("mahindra", "thar"): 1400000,
-            ("mahindra", "bolero"): 900000,
-            
-            # Toyota
-            ("toyota", "innova"): 1800000,
-            ("toyota", "fortuner"): 3500000,
-            
-            # Ford
-            ("ford", "ecosport"): 900000,
-            ("ford", "figo"): 550000,
-        }
+        # Step 1: Get NEW car price from Google Search with source URLs
+        print(f"   Fetching base price for NEW {make} {model}...")
+        price_data = self._get_base_price_from_google(make, model, year, fuel)
         
-        # Get base price (new car retail price)
-        key = (make.lower(), model.lower())
-        base_new_price = base_prices.get(key, 800000)  # Default for unlisted models
+        base_new_price = price_data['price']
+        source_urls = price_data['sources']  # List of URLs where prices were found
         
-        # FORMULA: Calculate Market Retail Price
+        if base_new_price == 0:
+            print(f"   ⚠️ Could not find base price, using estimated value")
+            base_new_price = 800000  # Fallback
+        
+        print(f"   ✓ Base NEW price: ₹{base_new_price:,}")
+        print(f"   ✓ Found on {len(source_urls)} sources")
+        
+        # Step 2: FORMULA - Calculate Market Retail Price
         current_year = datetime.now().year
         age = current_year - year
         
@@ -107,47 +68,29 @@ class ValuationAgent:
             depreciation_factor = (0.85 ** 5) * (0.92 ** (age - 5))
         
         # 2. KM-based adjustment
-        # Expected KM: 12,000 per year
         expected_km = age * 12000
         km_diff = km - expected_km
         
         if km_diff > 0:
-            # Excess KM penalty: Rs 2 per extra km
             km_adjustment = 1 - (km_diff * 2 / base_new_price)
         else:
-            # Low KM bonus: Rs 1 per saved km
             km_adjustment = 1 + (abs(km_diff) * 1 / base_new_price)
         
-        km_adjustment = max(0.7, min(1.15, km_adjustment))  # Cap between 70% and 115%
+        km_adjustment = max(0.7, min(1.15, km_adjustment))
         
         # 3. Fuel type adjustment
-        fuel_multiplier = {
-            "diesel": 1.10,  # Diesel cars retain higher value
-            "petrol": 1.00,
-            "cng": 0.95,
-            "electric": 0.90  # Higher depreciation due to battery concerns
-        }
+        fuel_multiplier = {"diesel": 1.10, "petrol": 1.00, "cng": 0.95, "electric": 0.90}
         fuel_factor = fuel_multiplier.get(fuel.lower() if fuel else "petrol", 1.0)
         
         # 4. Ownership penalty
-        owner_penalty = {
-            1: 1.00,
-            2: 0.95,
-            3: 0.90,
-            4: 0.85
-        }
+        owner_penalty = {1: 1.00, 2: 0.95, 3: 0.90, 4: 0.85}
         owner_factor = owner_penalty.get(owners if owners else 1, 0.85)
         
         # 5. Condition adjustment
-        condition_multiplier = {
-            "excellent": 1.05,
-            "good": 1.00,
-            "fair": 0.92,
-            "poor": 0.80
-        }
+        condition_multiplier = {"excellent": 1.05, "good": 1.00, "fair": 0.92, "poor": 0.80}
         condition_factor = condition_multiplier.get(condition.lower() if condition else "good", 1.0)
         
-        # FINAL MARKET RETAIL PRICE FORMULA
+        # FINAL MARKET RETAIL PRICE
         market_price = int(
             base_new_price * 
             depreciation_factor * 
@@ -157,26 +100,39 @@ class ValuationAgent:
             condition_factor
         )
         
-        # Generate mock listings for display (deterministic)
-        listings = [
-            {
-                "title": f"{year} {make.title()} {model.title()} {variant}",
-                "price": market_price,
-                "link": "#formula-based",
-                "source": "Formula Calculation",
-                "reason": f"Base: ₹{base_new_price:,}, Age: {age}y, KM: {km:,}"
-            }
-        ]
+        # Generate listings with ACTUAL source URLs
+        listings = []
+        
+        # Add main calculated price
+        listings.append({
+            "title": f"{year} {make.title()} {model.title()} {variant} (Used)",
+            "price": market_price,
+            "link": source_urls[0] if source_urls else "#",
+            "source": "Calculated Price",
+            "reason": f"Base: ₹{base_new_price:,} (NEW) → Applied depreciation formula"
+        })
+        
+        # Add source listings showing where base price came from
+        for idx, url in enumerate(source_urls[:3]):  # Show top 3 sources
+            # Ensure URL starts with http:// or https://
+            if url and not url.startswith('http'):
+                url = 'https://' + url
+            
+            print(f"   → Source #{idx+1}: {url}")
+            
+            listings.append({
+                "title": f"NEW {make.title()} {model.title()} Price Source #{idx+1}",
+                "price": base_new_price,
+                "link": url,
+                "source": "Base Price Reference",
+                "reason": "Click link to verify NEW car price"
+            })
         
         reasoning = (
-            f"Formula-based calculation (100% deterministic). "
-            f"Base new price: ₹{base_new_price/100000:.1f}L. "
-            f"Age depreciation: {depreciation_factor*100:.1f}%. "
-            f"KM adjustment: {km_adjustment*100:.1f}%. "
-            f"Fuel ({fuel}): {fuel_factor*100:.0f}%. "
-            f"Owners ({owners}): {owner_factor*100:.0f}%. "
-            f"Condition ({condition}): {condition_factor*100:.0f}%. "
-            f"Final Market Retail: ₹{market_price/100000:.2f}L"
+            f"Live base price: ₹{base_new_price/100000:.1f}L (fetched from {len(source_urls)} sources). "
+            f"Formula: Age {depreciation_factor*100:.1f}% × KM {km_adjustment*100:.1f}% × "
+            f"Fuel {fuel_factor*100:.0f}% × Owners {owner_factor*100:.0f}% × "
+            f"Condition {condition_factor*100:.0f}% = ₹{market_price/100000:.2f}L"
         )
         
         return {
@@ -185,6 +141,97 @@ class ValuationAgent:
             "market_price": market_price,
             "reasoning": reasoning
         }
+    
+    def _get_base_price_from_google(self, make, model, year, fuel):
+        """
+        Fetch NEW car on-road price from Google Search
+        Returns: dict with 'price' and 'sources' (list of URLs)
+        """
+        from datetime import datetime
+        import numpy as np
+        import re
+        
+        try:
+            # Search for new car price
+            current_year = datetime.now().year
+            query = f"{current_year} {make} {model} {fuel if fuel else ''} new car on-road price India"
+            
+            print(f"      Searching: {query}")
+            
+            # Use Google Custom Search API
+            if not self.search_key or not self.cx:
+                print("      ⚠️ Google Search API not configured")
+                return {'price': 0, 'sources': []}
+            
+            url = "https://www.googleapis.com/customsearch/v1"
+            params = {
+                "key": self.search_key,
+                "cx": self.cx,
+                "q": query,
+                "num": 5
+            }
+            
+            resp = requests.get(url, params=params, timeout=10)
+            data = resp.json()
+            
+            if "items" not in data:
+                return {'price': 0, 'sources': []}
+            
+            # Extract price from snippets AND capture source URLs
+            prices_with_urls = []  # List of (price, url) tuples
+            
+            for item in data["items"]:
+                text = item.get("snippet", "") + " " + item.get("title", "")
+                source_url = item.get("link", "")
+                
+                # Look for price patterns
+                patterns = [
+                    r'₹\s*([\d,]+\.?\d*)\s*(?:lakh|lac)',  # ₹12.50 Lakh
+                    r'Rs\.?\s*([\d,]+)',                    # Rs 850000
+                    r'INR\s*([\d,]+)',                      # INR 850000
+                    r'([\d,]+)\s*(?:lakh|lac)',             # 12.5 Lakh
+                ]
+                
+                for pattern in patterns:
+                    matches = re.findall(pattern, text, re.IGNORECASE)
+                    for match in matches:
+                        try:
+                            price_num = float(match.replace(',', ''))
+                            
+                            # Convert lakhs to actual rupees
+                            if 'lakh' in text.lower() or 'lac' in text.lower():
+                                if price_num < 100:  # Assume it's in lakhs
+                                    price_num = price_num * 100000
+                            
+                            # Validate range (cars typically 2L - 50L)
+                            if 200000 <= price_num <= 5000000:
+                                prices_with_urls.append((int(price_num), source_url))
+                                break  # Only take first valid price per URL
+                        except:
+                            continue
+            
+            if prices_with_urls:
+                # Get prices and URLs separately
+                prices = [p[0] for p in prices_with_urls]
+                urls = [p[1] for p in prices_with_urls]
+                
+                # Return median price with all source URLs
+                median_price = int(np.median(prices))
+                
+                print(f"      ✓ Found {len(prices)} prices from {len(urls)} sources")
+                print(f"      ✓ Price range: ₹{min(prices):,} - ₹{max(prices):,}")
+                print(f"      ✓ Using median: ₹{median_price:,}")
+                
+                return {
+                    'price': median_price,
+                    'sources': urls  # Return actual URLs for verification
+                }
+            
+            return {'price': 0, 'sources': []}
+            
+        except Exception as e:
+            print(f"      ✗ Error fetching base price: {e}")
+            return {'price': 0, 'sources': []}
 
     def _call_gemini_rest(self, prompt):
         """
