@@ -200,12 +200,19 @@ if st.button("Consult Agent", type="primary", use_container_width=True):
                 for item in listings:
                     link = item.get("link", "#")
                     title = item.get("title", "Unknown")
-                    price = item.get("price", 0)
+                    price = item.get("price")
+                    
+                    # Safe Price Formatting
+                    try:
+                        price_val = float(price) if price is not None else 0
+                    except (ValueError, TypeError):
+                        price_val = 0
+                        
                     # Streamlit LinkColumn format
                     df_data.append({
                         "Source": item.get("source", "Web"),
                         "Title": title,
-                        "Price": f"₹ {price:,.0f}",
+                        "Price": f"₹ {price_val:,.0f}" if price_val > 0 else "N/A",
                         "URL": link
                     })
                 
