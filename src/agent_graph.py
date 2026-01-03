@@ -45,17 +45,18 @@ class ValuationAgent:
         
         # Step 1: Get NEW car price from Google Search with source URLs
         print(f"   Fetching base price for NEW {make} {model}...")
-        price_data = self._get_base_price_from_google(make, model, year, fuel)
+        price_data = self._get_base_price_from_google(make, model, year, fuel, variant, location)
         
         base_new_price = price_data['price']
-        source_urls = price_data['sources']  # List of URLs where prices were found
+        source_urls = price_data.get('sources', [])
+        source_details = price_data.get('source_details', [])  # Individual price-URL pairs
         
         if base_new_price == 0:
             print(f"   ⚠️ Could not find base price, using estimated value")
             base_new_price = 800000  # Fallback
         
-        print(f"   ✓ Base NEW price: ₹{base_new_price:,}")
-        print(f"   ✓ Found on {len(source_urls)} sources")
+        print(f"   ✓ Base NEW price (median): ₹{base_new_price:,}")
+        print(f"   ✓ Found on {len(source_details)} sources")
         
         # Step 2: FORMULA - Calculate Market Retail Price
         current_year = datetime.now().year
@@ -90,7 +91,7 @@ class ValuationAgent:
         condition_multiplier = {"excellent": 1.05, "good": 1.00, "fair": 0.92, "poor": 0.80}
         condition_factor = condition_multiplier.get(condition.lower() if condition else "good", 1.0)
         
-        # FINAL MARKET RETAIL PRICE
+        # FINAL MARKET RETAIL PRICE (using median)
         market_price = int(
             base_new_price * 
             depreciation_factor * 
@@ -100,36 +101,40 @@ class ValuationAgent:
             condition_factor
         )
         
-        # Generate listings with ACTUAL source URLs
+        # Generate listings with EXACT PRICES from each source
         listings = []
         
         # Add main calculated price
         listings.append({
             "title": f"{year} {make.title()} {model.title()} {variant} (Used)",
             "price": market_price,
-            "link": source_urls[0] if source_urls else "#",
-            "source": "Calculated Price",
-            "reason": f"Base: ₹{base_new_price:,} (NEW) → Applied depreciation formula"
+            "link": source_details[0]['url'] if source_details else "#",
+            "source": "Your Procurement Price",
+            "reason": f"Calculated from median base price: ₹{base_new_price:,}"
         })
         
-        # Add source listings showing where base price came from
-        for idx, url in enumerate(source_urls[:3]):  # Show top 3 sources
+        # Add source listings with THEIR ACTUAL PRICES
+        for idx, source in enumerate(source_details[:3]):  # Show top 3 sources
             # Ensure URL starts with http:// or https://
+            url = source['url']
             if url and not url.startswith('http'):
                 url = 'https://' + url
             
-            print(f"   → Source #{idx+1}: {url}")
+            actual_price = source['price']  # EXACT price from this source
+            source_title = source.get('title', f"Source #{idx+1}")
+            
+            print(f"   → Source #{idx+1}: {source_title[:60]}... - ₹{actual_price:,}")
             
             listings.append({
-                "title": f"NEW {make.title()} {model.title()} Price Source #{idx+1}",
-                "price": base_new_price,
+                "title": f"NEW {make.title()} {model.title()} - {source_title[:50]}",
+                "price": actual_price,  # Show EXACT price from this link
                 "link": url,
-                "source": "Base Price Reference",
-                "reason": "Click link to verify NEW car price"
+                "source": f"Market Source #{idx+1}",
+                "reason": f"Price from this website: ₹{actual_price:,}"
             })
         
         reasoning = (
-            f"Live base price: ₹{base_new_price/100000:.1f}L (fetched from {len(source_urls)} sources). "
+            f"Found {len(source_details)} sources. Median base price: ₹{base_new_price/100000:.1f}L. "
             f"Formula: Age {depreciation_factor*100:.1f}% × KM {km_adjustment*100:.1f}% × "
             f"Fuel {fuel_factor*100:.0f}% × Owners {owner_factor*100:.0f}% × "
             f"Condition {condition_factor*100:.0f}% = ₹{market_price/100000:.2f}L"
@@ -142,7 +147,7 @@ class ValuationAgent:
             "reasoning": reasoning
         }
     
-    def _get_base_price_from_google(self, make, model, year, fuel):
+    def _get_base_price_from_google(self, make, model, year, fuel, variant=None, location=None):
         """
         Fetch NEW car on-road price from Google Search
         Returns: dict with 'price' and 'sources' (list of URLs)
@@ -152,9 +157,21 @@ class ValuationAgent:
         import re
         
         try:
-            # Search for new car price
+            # Search for new car price - INCLUDE VARIANT in search
             current_year = datetime.now().year
-            query = f"{current_year} {make} {model} {fuel if fuel else ''} new car on-road price India"
+            
+            # Build specific query with variant and location if available
+            query_parts = [f"{current_year}", make, model]
+            if variant:
+                query_parts.append(variant)
+            if fuel:
+                query_parts.append(fuel)
+            query_parts.extend(["new car on-road price"])
+            if location:
+                query_parts.append(location)
+            query_parts.append("India")
+            
+            query = " ".join(query_parts)
             
             print(f"      Searching: {query}")
             
@@ -168,7 +185,7 @@ class ValuationAgent:
                 "key": self.search_key,
                 "cx": self.cx,
                 "q": query,
-                "num": 5
+                "num": 10  # Get more results to filter better
             }
             
             resp = requests.get(url, params=params, timeout=10)
@@ -178,11 +195,30 @@ class ValuationAgent:
                 return {'price': 0, 'sources': []}
             
             # Extract price from snippets AND capture source URLs
-            prices_with_urls = []  # List of (price, url) tuples
+            prices_with_urls = []  # List of (price, url, title) tuples
             
             for item in data["items"]:
                 text = item.get("snippet", "") + " " + item.get("title", "")
                 source_url = item.get("link", "")
+                title = item.get("title", "")
+                
+                text_lower = text.lower()
+                
+                # Simplified filtering: Accept if it has a price, prefer location/variant matches
+                has_location_match = False
+                has_variant_match = False
+                
+                # Check location match
+                if location:
+                    if location.lower() in text_lower or location.lower() in source_url.lower():
+                        has_location_match = True
+                
+                # Check variant match (more lenient)
+                if variant:
+                    # Remove special chars and check if any variant part is in text
+                    variant_clean = variant.lower().replace("(", "").replace(")", "").replace("-", " ")
+                    if variant_clean in text_lower:
+                        has_variant_match = True
                 
                 # Look for price patterns
                 patterns = [
@@ -205,28 +241,59 @@ class ValuationAgent:
                             
                             # Validate range (cars typically 2L - 50L)
                             if 200000 <= price_num <= 5000000:
-                                prices_with_urls.append((int(price_num), source_url))
+                                # Calculate score for sorting
+                                score = 0
+                                if has_location_match:
+                                    score += 10
+                                if has_variant_match:
+                                    score += 5
+                                
+                                prices_with_urls.append((int(price_num), source_url, title, score))
+                                
+                                match_info = []
+                                if has_location_match:
+                                    match_info.append("location✓")
+                                if has_variant_match:
+                                    match_info.append("variant✓")
+                                match_str = ", ".join(match_info) if match_info else "general"
+                                
+                                print(f"      ✓ {title[:50]}... - ₹{int(price_num):,} [{match_str}]")
                                 break  # Only take first valid price per URL
                         except:
                             continue
             
             if prices_with_urls:
+                # Sort by score (highest first) - location and variant matches appear first
+                prices_with_urls.sort(key=lambda x: x[3], reverse=True)
+                
                 # Get prices and URLs separately
                 prices = [p[0] for p in prices_with_urls]
                 urls = [p[1] for p in prices_with_urls]
+                titles = [p[2] for p in prices_with_urls]
                 
-                # Return median price with all source URLs
+                # Return median price AND individual source data
                 median_price = int(np.median(prices))
                 
-                print(f"      ✓ Found {len(prices)} prices from {len(urls)} sources")
+                # Build source list with EXACT prices from each link
+                source_list = []
+                for i, (price, url, title, score) in enumerate(prices_with_urls):  # Fixed: added score
+                    source_list.append({
+                        'price': price,  # EXACT price from this source
+                        'url': url,
+                        'title': title
+                    })
+                
+                print(f"      ✓ Found {len(prices)} MATCHING prices from {len(urls)} sources")
                 print(f"      ✓ Price range: ₹{min(prices):,} - ₹{max(prices):,}")
                 print(f"      ✓ Using median: ₹{median_price:,}")
                 
                 return {
-                    'price': median_price,
-                    'sources': urls  # Return actual URLs for verification
+                    'price': median_price,  # For calculation
+                    'sources': urls,  # URLs for backward compatibility
+                    'source_details': source_list  # Individual price-URL pairs
                 }
             
+            print(f"      ⚠️ No matching results found for {location} {variant}")
             return {'price': 0, 'sources': []}
             
         except Exception as e:

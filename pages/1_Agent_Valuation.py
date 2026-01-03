@@ -177,20 +177,30 @@ if st.button("Consult Agent", type="primary", use_container_width=True):
                 df_data = []
                 for item in listings:
                     link = item.get("link", "#")
+                    # Ensure links start with http/https for LinkColumn to work
+                    if link and link != "#" and not link.startswith('http'):
+                        link = 'https://' + link
+                    
                     title = item.get("title", "Unknown")
                     price = item.get("price", 0)
-                    # Streamlit LinkColumn format
+                    source = item.get("source", "Web")
+                    
                     df_data.append({
-                        "Source": item.get("source", "Web"),
+                        "Source": source,
                         "Title": title,
                         "Price": f"₹ {price:,.0f}",
-                        "URL": link
+                        "Evidence Link": link  # Changed column name to match LinkColumn
                     })
                 
                 st.dataframe(
                     pd.DataFrame(df_data), 
-                    column_config={"URL": st.column_config.LinkColumn("Evidence Link")},
-                    use_container_width=True, 
+                    column_config={
+                        "Evidence Link": st.column_config.LinkColumn(
+                            "Evidence Link",
+                            display_text="🔗 View Source"  # Clickable text
+                        )
+                    },
+                    width='stretch',  # Replaced use_container_width
                     hide_index=True
                 )
             else:
