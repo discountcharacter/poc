@@ -96,11 +96,10 @@ class ValuationAgent:
         
         YOUR TASK:
         1. Identify listings that match the Target Vehicle REASONABLY WELL. 
-           - Match Year within +/- 2 years (Be sensible, e.g. 2024 matches 2025).
+           - Match Year within +/- 1 year.
            - Match Model (Must be {model}).
-           - Match Variant logic: Be FLEXIBLE. (e.g. "XZA" covers "XZA+", "Revotron" implies Petrol).
-           - If RELEVANT listings are found (even if variant is not 100% exact), INCLUDE THEM.
-           - IGNORE only completely irrelevant results (wrong model, wrong make).
+           - Match Variant logic (e.g. "SX" matches "SX 1.5").
+           - IGNORE completely irrelevant results.
         
         2. Extract the PRICE and LINK (URL) for each valid listing.
         
