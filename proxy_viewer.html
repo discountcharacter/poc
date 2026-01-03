@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cars24 Proxy Code Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .search-box {
+            max-width: 600px;
+            margin: 0 auto 3rem;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 1.2rem 1.5rem;
+            font-size: 1.1rem;
+            border: none;
+            border-radius: 50px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .search-input:focus {
+            box-shadow: 0 10px 40px rgba(255, 255, 255, 0.2);
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 1.5rem 2.5rem;
+            border-radius: 15px;
+            color: white;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-top: 0.5rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .car-card {
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .car-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .car-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+
+        .car-info {
+            padding: 1.5rem;
+        }
+
+        .proxy-code {
+            display: inline-block;
+            font-size: 2.5rem;
+            font-weight: 800;
+            font-family: monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .car-name {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 0.3rem;
+        }
+
+        .car-model {
+            font-size: 1rem;
+            color: #7f8c8d;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            background: #667eea;
+            color: white;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-top: 0.8rem;
+        }
+
+        .no-results {
+            text-align: center;
+            color: white;
+            font-size: 1.5rem;
+            padding: 4rem 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 Cars24 Proxy Code Viewer</h1>
+            <p>Browse all car models by their unique proxy codes</p>
+        </div>
+
+        <div class="search-box">
+            <input type="text" class="search-input" id="searchInput"
+                placeholder="Search by proxy code, make, or model..." oninput="filterCars()">
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalCars">121</div>
+                <div class="stat-label">Total Models</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="visibleCars">121</div>
+                <div class="stat-label">Showing</div>
+            </div>
+        </div>
+
+        <div class="grid" id="carGrid"></div>
+        <div class="no-results" id="noResults" style="display:none;">No cars found!</div>
+    </div>
+
+    <script>
+        // Sample car data with actual proxy codes from your CSV
+        const cars = [
+            { code: 'A', make: 'Audi', model: 'A4', image: '/C:/Users/chenn/.gemini/antigravity/brain/13ade69e-3720-4824-a6aa-400716fa20da/audi_a4_proxy_a_1767341066440.png' },
+            { code: 'B', make: 'Audi', model: 'A6', image: 'https://via.placeholder.com/400x300/4A90E2/ffffff?text=Audi+A6' },
+            { code: 'C', make: 'Audi', model: 'A8', image: 'https://via.placeholder.com/400x300/4A90E2/ffffff?text=Audi+A8' },
+            { code: 'D', make: 'Audi', model: 'Q7', image: 'https://via.placeholder.com/400x300/4A90E2/ffffff?text=Audi+Q7' },
+            { code: 'F', make: 'BMW', model: '3', image: '/C:/Users/chenn/.gemini/antigravity/brain/13ade69e-3720-4824-a6aa-400716fa20da/bmw_3_proxy_f_1767341084134.png' },
+            { code: 'G', make: 'BMW', model: '5', image: 'https://via.placeholder.com/400x300/2C3E50/ffffff?text=BMW+5' },
+            { code: 'g', make: 'Hyundai', model: 'Creta', image: '/C:/Users/chenn/.gemini/antigravity/brain/13ade69e-3720-4824-a6aa-400716fa20da/hyundai_creta_proxy_g_1767341105042.png' },
+            { code: 'k', make: 'Hyundai', model: 'i20', image: 'https://via.placeholder.com/400x300/E74C3C/ffffff?text=Hyundai+i20' },
+            { code: 'Z', make: 'Honda', model: 'City', image: '/C:/Users/chenn/.gemini/antigravity/brain/13ade69e-3720-4824-a6aa-400716fa20da/honda_city_proxy_z_1767341139457.png' },
+            { code: 'Y', make: 'Honda', model: 'Amaze', image: 'https://via.placeholder.com/400x300/9B59B6/ffffff?text=Honda+Amaze' },
+            { code: 'BB', make: 'Maruti', model: 'Alto', image: 'https://via.placeholder.com/400x300/27AE60/ffffff?text=Maruti+Alto' },
+            { code: 'BM', make: 'Maruti', model: 'Swift', image: '/C:/Users/chenn/.gemini/antigravity/brain/13ade69e-3720-4824-a6aa-400716fa20da/maruti_swift_proxy_bm_1767341122804.png' },
+            { code: 'BN', make: 'Maruti', model: 'Swift Dzire', image: 'https://via.placeholder.com/400x300/27AE60/ffffff?text=Maruti+Dzire' },
+            { code: '2', make: 'Lexus', model: 'RX', image: 'https://via.placeholder.com/400x300/34495E/ffffff?text=Lexus+RX' },
+            { code: 'O', make: 'Datsun', model: 'Go', image: 'https://via.placeholder.com/400x300/F39C12/ffffff?text=Datsun+Go' },
+        ];
+
+        function renderCars(filteredCars = cars) {
+            const grid = document.getElementById('carGrid');
+            const noResults = document.getElementById('noResults');
+
+            grid.innerHTML = '';
+
+            if (filteredCars.length === 0) {
+                noResults.style.display = 'block';
+                grid.style.display = 'none';
+            } else {
+                noResults.style.display = 'none';
+                grid.style.display = 'grid';
+
+                filteredCars.forEach(car => {
+                    const card = document.createElement('div');
+                    card.className = 'car-card';
+                    card.innerHTML = `
+                        <img src="${car.image}" alt="${car.make} ${car.model}" class="car-image" onerror="this.src='https://via.placeholder.com/400x300/95A5A6/ffffff?text=${car.make}+${car.model}'">
+                        <div class="car-info">
+                            <div class="proxy-code">${car.code}</div>
+                            <div class="car-name">${car.make}</div>
+                            <div class="car-model">${car.model}</div>
+                            <span class="badge">Code: ${car.code}</span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+
+            document.getElementById('visibleCars').textContent = filteredCars.length;
+        }
+
+        function filterCars() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = cars.filter(car =>
+                car.code.toLowerCase().includes(searchTerm) ||
+                car.make.toLowerCase().includes(searchTerm) ||
+                car.model.toLowerCase().includes(searchTerm)
+            );
+            renderCars(filtered);
+        }
+
+        // Initial render
+        renderCars();
+    </script>
+</body>
+
+</html>
