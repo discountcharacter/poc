@@ -38,7 +38,7 @@ st.markdown("""
     }
     .reasoning-text {
         font-family: 'Courier New', monospace;
-        color: #E2E8F0;
+        color: #94A3B8; /* Darker Gray */
         line-height: 1.6;
     }
     .stButton>button {
