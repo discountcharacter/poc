@@ -106,6 +106,7 @@ class ValuationAgent:
         3. CALCULATE THE "MARKET RETAIL PRICE" (What dealers sell for).
            - Median of valid listings.
            - Adjust for Odometer/Condition (High KM = Lower Value).
+           - CRITICAL: If no exact prices found in snippets, USE YOUR INTELLIGENCE to PREDICT/ESTIMATE the price based on the car details and Indian Market context. DO NOT return 0 or Null if you can estimate it.
         
         OUTPUT FORMAT (JSON ONLY):
         {{
