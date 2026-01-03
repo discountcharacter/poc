@@ -49,10 +49,10 @@ class ValuationAgent:
                     "num": 5 # Top 5 results
                 }
                 resp = requests.get(url, params=params, timeout=10)
-                data = resp.json()
+                json_data = resp.json() # Renamed to json_data to avoid conflict
                 
-                if "items" in data:
-                    for item in data["items"]:
+                if "items" in json_data:
+                    for item in json_data["items"]:
                         title = item.get("title", "")
                         link = item.get("link", "")
                         snippet = item.get("snippet", "")
