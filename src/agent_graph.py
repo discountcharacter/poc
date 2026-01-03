@@ -115,7 +115,7 @@ class ValuationAgent:
             ],
             "rejected_count": 5,
             "market_price": 1050000,
-            "reasoning": "Found 3 matches. Market Ask is ~10.5L. Adjusted down for 80k km."
+            "reasoning": "Detailed analysis. Mention specific listings (e.g. 'Found 2010 City at 2.75L'). Explain adjustments for mileage/condition (e.g. '330k km is exceptionally high, reducing value by 50%'). Be professional and analytical."
         }}
         """
         
