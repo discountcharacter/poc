@@ -182,21 +182,13 @@ if st.button("Consult Agent", type="primary", use_container_width=True):
                 
                 st.markdown("</div>", unsafe_allow_html=True)
 
-                st.markdown("### Agent Reasoning")
-                st.markdown(f'<div class="reasoning-text">{result["reasoning"]}</div>', unsafe_allow_html=True)
-                
+                # Agent Reasoning & Evidence
                 st.markdown("### Evidence (Verified Listings)")
-                st.dataframe(pd.DataFrame(result["verified_listings"]))
+                st.dataframe(pd.DataFrame(result.get("valid_listings", [])))
                 valid_count = len(result.get('valid_listings', []))
                 rejected_count = result.get('rejected_count', 0)
                 st.write(f"**{valid_count}** Verified Matches found.")
                 st.caption(f"Rejected {rejected_count} irrelevant results.")
-                st.markdown('</div>', unsafe_allow_html=True)
-
-            with c2:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.caption("AGENT REASONING")
-                st.markdown(f'<div class="reasoning-text">{result.get("reasoning", "No reasoning provided.")}</div>', unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
             # Listings Table with Links
