@@ -155,7 +155,8 @@ class ValuationAgent:
         """
         Raw REST API call to Gemini Pro with Retry logic.
         """
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:generateContent?key={self.gemini_key}"
+        # Using gemini-2.0-flash as it is the currently available stable model
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.gemini_key}"
         headers = {'Content-Type': 'application/json'}
         payload = {
             "contents": [{
