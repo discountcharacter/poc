@@ -31,9 +31,9 @@ class ValuationAgent:
         
         # 1. Browse (Google Custom Search API)
         queries = [
-            f"{year} {make} {model} {variant} price {location} site:carwale.com",
-            f"{year} {make} {model} {variant} price {location} site:spinny.com",
-            f"{year} {make} {model} {variant} price {location} site:cardekho.com"
+            f"used {year} {make} {model} {variant} price in {location} site:carwale.com",
+            f"used {year} {make} {model} {variant} price in {location} site:spinny.com",
+            f"used {year} {make} {model} {variant} price in {location} site:cardekho.com"
         ]
         
         raw_listings = []
@@ -46,7 +46,7 @@ class ValuationAgent:
                     "key": self.search_key,
                     "cx": self.cx,
                     "q": q,
-                    "num": 5 # Top 5 results
+                    "num": 10 # Increase to 10 to find prices
                 }
                 resp = requests.get(url, params=params, timeout=10)
                 json_data = resp.json() # Renamed to json_data to avoid conflict
