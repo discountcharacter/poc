@@ -115,72 +115,86 @@ if st.button("Consult Agent", type="primary", use_container_width=True):
             
             # --- Main Display ---
             st.markdown("---")
-            c1, c2 = st.columns([1, 1.5])
+            # --- Main Display ---
+            st.markdown("---")
             
+            # Imports
+            from src.procurement_algo import ProcurementAlgo
+            from src.formula_engine import FormulaEngine
+
+            # 1. Calculate All Values First
+            # Agent Market Price
+            market_price = result.get('market_price') or result.get('estimated_price', 0)
+            
+            # Procurement Algo
+            market_price_val = int(market_price)
+            proc_res = ProcurementAlgo.calculate_procurement_price(
+                market_price_val, make, model, year, km, owners, condition
+            )
+            buy_price = proc_res['final_procurement_price']
+            buy_low = buy_price * 0.95
+            buy_high = buy_price * 1.05
+            
+            # Formula Engine
+            f_engine = FormulaEngine()
+            formula_res = f_engine.calculate_price(make, model, variant, year, km, fuel, owners, condition, location)
+
+            # 2. Display Grid
+            c1, c2 = st.columns(2)
+            
+            # --- Left Column: Procurement & Market ---
             with c1:
                 st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.caption("MARKET RETAIL PRICE (High Range)")
-                # Support both keys during transition
-                market_price = result.get('market_price') or result.get('estimated_price', 0)
                 
+                # A. Recommended Procurement (Top Priority)
+                st.caption("RECOMMENDED PROCUREMENT PRICE (Precision Algo)")
+                st.markdown(
+                    f"<div style='font-size: 2.2rem; font-weight: 700; color: #3B82F6'>"
+                    f"₹ {buy_low:,.0f} - ₹ {buy_high:,.0f}</div>", 
+                    unsafe_allow_html=True
+                )
+                
+                st.info(f"Basis: {proc_res['details']}.")
+                st.caption("Algo Breakdown:")
+                st.json(proc_res) # Shown Directly
+                
+                st.markdown("---")
+                
+                # B. Market Retail Price (Below Procurement)
+                st.caption("MARKET RETAIL PRICE (High Range)")
                 fmt_price = f"₹ {market_price:,.0f}" if market_price > 0 else "N/A"
                 if market_price == 0:
-                    st.markdown(f'<div class="main-metric" style="color: #EF4444">{fmt_price}</div>', unsafe_allow_html=True)
-                    st.warning("No valid listings found.")
+                     st.markdown(f'<div class="main-metric" style="color: #EF4444">{fmt_price}</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<div class="main-metric">{fmt_price}</div>', unsafe_allow_html=True)
-                    
-                    # PROCUREMENT ALGO (Precision Lower Range)
-                    from src.procurement_algo import ProcurementAlgo
-                    
-                    market_price_val = int(market_price)
-                    proc_res = ProcurementAlgo.calculate_procurement_price(
-                        market_price_val, make, model, year, km, owners, condition
-                    )
-                    
-                    buy_price = proc_res['final_procurement_price']
-                    
-                    # Create a range around the Calculated Buy Price
-                    # e.g. Buy Price +/- 5%
-                    buy_low = buy_price * 0.95
-                    buy_high = buy_price * 1.05
-                    
-                    st.markdown("---")
-                    st.caption("RECOMMENDED PROCUREMENT PRICE (Precision Algo)")
-                    st.markdown(
-                        f"<div style='font-size: 2rem; font-weight: 700; color: #3B82F6'>"
-                        f"₹ {buy_low:,.0f} - ₹ {buy_high:,.0f}</div>", 
-                        unsafe_allow_html=True
-                    )
-                    
-                    st.info(f"Basis: {proc_res['details']}. Deductions applied for Condition & Ownership.")
+                     st.markdown(f'<div class="main-metric">{fmt_price}</div>', unsafe_allow_html=True)
+
                 st.markdown("</div>", unsafe_allow_html=True)
-                
+
+            # --- Right Column: Formula & Reasoning ---
             with c2:
-                # --- NEW FORMULA ENGINE ENGINE ---
-                from src.formula_engine import FormulaEngine
-                
                 st.markdown('<div class="card">', unsafe_allow_html=True)
+                
+                # C. Formula Value (Next to Procurement)
                 st.caption("FORMULA VALUE (Base Price Logic)")
-                
-                # Run Formula Calculation
-                f_engine = FormulaEngine()
-                formula_res = f_engine.calculate_price(make, model, variant, year, km, fuel, owners, condition, location)
-                
                 if "error" in formula_res:
                     st.error(formula_res["error"])
                 else:
                     f_price = formula_res["price"]
                     f_base = formula_res["base_new_price"]
-                    
                     st.markdown(f'<div class="main-metric" style="color: #F59E0B">₹ {f_price:,.0f}</div>', unsafe_allow_html=True)
                     st.caption(f"derived from Base New Price: ₹ {f_base:,.0f}")
                     
-                    with st.expander("Formula Breakdown"):
-                        st.json(formula_res["factors"])
-                        st.write("Formula: Base * Dep * KM * Fuel * Owner * Cond")
+                    st.caption("Formula Breakdown:")
+                    st.json(formula_res["factors"]) # Shown Directly
+                    st.caption("Logic: Base * Dep * KM * Fuel * Owner * Cond")
                 
                 st.markdown("</div>", unsafe_allow_html=True)
+                
+                # Agent Reasoning
+                st.markdown('<div class="card">', unsafe_allow_html=True)
+                st.caption("AGENT REASONING")
+                st.markdown(f'<div class="reasoning-text">{result.get("reasoning", "No reasoning provided.")}</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
                 # Agent Reasoning & Evidence
                 st.markdown("### Evidence (Verified Listings)")
