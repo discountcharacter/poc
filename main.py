@@ -132,8 +132,17 @@ if st.button("Consult Agent", type="primary", use_container_width=True):
                 market_price_val, make, model, year, km, owners, condition
             )
             buy_price = proc_res['final_procurement_price']
-            buy_low = buy_price * 0.95
-            buy_high = buy_price * 1.05
+            base_proc = proc_res['base_procurement']
+            
+            # Logic: If Bonus/Inflation (Final > Base), clamp range as requested
+            # User: "make base_procurement as lower end, current lower range as new upper limit"
+            if buy_price > base_proc:
+                 buy_low = float(base_proc)
+                 buy_high = max(float(base_proc), buy_price * 0.95)
+            else:
+                 # Standard range for Penalty cases
+                 buy_low = buy_price * 0.95
+                 buy_high = buy_price * 1.05
             
             # Formula Engine
             f_engine = FormulaEngine()
