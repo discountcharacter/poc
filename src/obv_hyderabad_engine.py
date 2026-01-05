@@ -23,12 +23,23 @@ from datetime import datetime, date
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
+import sys
+import os
 
-# Import price fetcher
+# Import price fetcher with robust path handling
 try:
+    # Add src directory to path if not already there
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+
     from price_fetcher import price_fetcher
     PRICE_FETCHER_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    print(f"Price fetcher import failed: {e}")
+    PRICE_FETCHER_AVAILABLE = False
+except Exception as e:
+    print(f"Price fetcher error: {e}")
     PRICE_FETCHER_AVAILABLE = False
 
 
@@ -220,10 +231,20 @@ class OBVHyderabadEngine:
             Current ex-showroom price in INR
         """
         # Try live price fetcher first
-        if PRICE_FETCHER_AVAILABLE and fuel_type:
+        if not PRICE_FETCHER_AVAILABLE:
+            self.warnings.append(
+                "⚠️ Live price fetcher not available. Check if price_fetcher.py is accessible "
+                "and all dependencies (google-generativeai, requests) are installed."
+            )
+        elif not fuel_type:
+            self.warnings.append(
+                "⚠️ Fuel type not provided. Live price search requires fuel type."
+            )
+        else:
             fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
 
             try:
+                print(f"🔍 Attempting live price search for {make} {model} {variant} {fuel_str}...")
                 price_data = price_fetcher.get_current_price(
                     make=make,
                     model=model,
@@ -232,18 +253,37 @@ class OBVHyderabadEngine:
                     year=year
                 )
 
-                if price_data and price_data.get("source") != "fallback_estimate":
-                    # Use ex-showroom price from live search
-                    ex_showroom = price_data.get("ex_showroom_price")
-                    if ex_showroom and 300000 <= ex_showroom <= 15000000:
-                        self.recommendations.append(
-                            f"✅ Using live price data from {price_data.get('source', 'search')}: "
-                            f"₹{ex_showroom:,.0f}"
+                if price_data:
+                    source = price_data.get("source")
+                    print(f"📊 Price data received. Source: {source}")
+
+                    if source != "fallback_estimate":
+                        # Use ex-showroom price from live search
+                        ex_showroom = price_data.get("ex_showroom_price")
+                        if ex_showroom and 300000 <= ex_showroom <= 15000000:
+                            self.recommendations.append(
+                                f"✅ Using live price data from {source}: ₹{ex_showroom:,.0f}"
+                            )
+                            return ex_showroom
+                        else:
+                            print(f"⚠️ Price validation failed: ₹{ex_showroom}")
+                            self.warnings.append(
+                                f"⚠️ Live price found (₹{ex_showroom:,.0f}) but outside valid range. Using fallback."
+                            )
+                    else:
+                        print(f"ℹ️ Price fetcher returned fallback estimate")
+                        self.warnings.append(
+                            "ℹ️ Live price search returned no results. Using fallback estimate."
                         )
-                        return ex_showroom
+                else:
+                    print("⚠️ No price data returned from fetcher")
 
             except Exception as e:
-                print(f"Price fetcher error: {e}")
+                error_msg = str(e)
+                print(f"❌ Price fetcher error: {error_msg}")
+                self.warnings.append(
+                    f"⚠️ Live price search failed: {error_msg[:100]}. Using fallback."
+                )
 
         # Fallback to segment-based estimation
         segments = {
