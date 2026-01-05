@@ -21,9 +21,16 @@ Key Features:
 import streamlit as st
 from datetime import date, datetime
 import pandas as pd
-import plotly.graph_objects as go
 import sys
 import os
+
+# Optional plotly import (fallback if not available)
+try:
+    import plotly.graph_objects as go
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+    st.warning("📊 Plotly not installed. Install with: `pip install plotly` for enhanced visualizations.")
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -463,42 +470,76 @@ if calculate_btn:
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Create waterfall chart
-        fig = go.Figure(go.Waterfall(
-            name="Valuation",
-            orientation="v",
-            measure=["absolute", "relative", "relative", "relative", "relative", "relative", "total"],
-            x=["Base Price", "Depreciation", "Odometer Adj", "Condition Adj", "Ownership", "Location", "Fair Market Value"],
-            textposition="outside",
-            text=[
-                f"₹{result.base_price:,.0f}",
-                f"₹{result.depreciated_value - result.base_price:,.0f}",
-                f"₹{result.usage_adjusted_value - result.depreciated_value:,.0f}",
-                f"₹{result.condition_adjusted_value - result.usage_adjusted_value:,.0f}",
-                f"₹{result.condition_adjusted_value * (result.ownership_multiplier - 1):,.0f}",
-                f"₹{result.fair_market_value - result.condition_adjusted_value * result.ownership_multiplier:,.0f}",
-                f"₹{result.fair_market_value:,.0f}"
-            ],
-            y=[
-                result.base_price,
-                result.depreciated_value - result.base_price,
-                result.usage_adjusted_value - result.depreciated_value,
-                result.condition_adjusted_value - result.usage_adjusted_value,
-                result.condition_adjusted_value * (result.ownership_multiplier - 1),
-                result.fair_market_value - result.condition_adjusted_value * result.ownership_multiplier,
-                result.fair_market_value
-            ],
-            connector={"line": {"color": "rgb(63, 63, 63)"}},
-        ))
+        if PLOTLY_AVAILABLE:
+            # Create waterfall chart
+            fig = go.Figure(go.Waterfall(
+                name="Valuation",
+                orientation="v",
+                measure=["absolute", "relative", "relative", "relative", "relative", "relative", "total"],
+                x=["Base Price", "Depreciation", "Odometer Adj", "Condition Adj", "Ownership", "Location", "Fair Market Value"],
+                textposition="outside",
+                text=[
+                    f"₹{result.base_price:,.0f}",
+                    f"₹{result.depreciated_value - result.base_price:,.0f}",
+                    f"₹{result.usage_adjusted_value - result.depreciated_value:,.0f}",
+                    f"₹{result.condition_adjusted_value - result.usage_adjusted_value:,.0f}",
+                    f"₹{result.condition_adjusted_value * (result.ownership_multiplier - 1):,.0f}",
+                    f"₹{result.fair_market_value - result.condition_adjusted_value * result.ownership_multiplier:,.0f}",
+                    f"₹{result.fair_market_value:,.0f}"
+                ],
+                y=[
+                    result.base_price,
+                    result.depreciated_value - result.base_price,
+                    result.usage_adjusted_value - result.depreciated_value,
+                    result.condition_adjusted_value - result.usage_adjusted_value,
+                    result.condition_adjusted_value * (result.ownership_multiplier - 1),
+                    result.fair_market_value - result.condition_adjusted_value * result.ownership_multiplier,
+                    result.fair_market_value
+                ],
+                connector={"line": {"color": "rgb(63, 63, 63)"}},
+            ))
 
-        fig.update_layout(
-            title="Price Waterfall: Base Price → Fair Market Value",
-            showlegend=False,
-            height=400,
-            yaxis_title="Price (INR)"
-        )
+            fig.update_layout(
+                title="Price Waterfall: Base Price → Fair Market Value",
+                showlegend=False,
+                height=400,
+                yaxis_title="Price (INR)"
+            )
 
-        st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            # Fallback: Table-based breakdown
+            st.markdown("**Price Waterfall: Base Price → Fair Market Value**")
+            breakdown_data = {
+                "Step": [
+                    "1. Base Price (Current New)",
+                    "2. After Depreciation",
+                    "3. After Odometer Adjustment",
+                    "4. After Condition Adjustment",
+                    "5. After Ownership Factor",
+                    "6. After Location Factor",
+                    "**Final Fair Market Value**"
+                ],
+                "Price": [
+                    f"₹{result.base_price:,.0f}",
+                    f"₹{result.depreciated_value:,.0f}",
+                    f"₹{result.usage_adjusted_value:,.0f}",
+                    f"₹{result.condition_adjusted_value:,.0f}",
+                    f"₹{result.condition_adjusted_value * result.ownership_multiplier:,.0f}",
+                    f"₹{result.fair_market_value:,.0f}",
+                    f"**₹{result.fair_market_value:,.0f}**"
+                ],
+                "Change": [
+                    "—",
+                    f"₹{result.depreciated_value - result.base_price:,.0f}",
+                    f"₹{result.usage_adjusted_value - result.depreciated_value:,.0f}",
+                    f"₹{result.condition_adjusted_value - result.usage_adjusted_value:,.0f}",
+                    f"₹{result.condition_adjusted_value * (result.ownership_multiplier - 1):,.0f}",
+                    f"₹{result.fair_market_value - result.condition_adjusted_value * result.ownership_multiplier:,.0f}",
+                    "—"
+                ]
+            }
+            st.dataframe(pd.DataFrame(breakdown_data), use_container_width=True, hide_index=True)
 
     with col2:
         st.markdown('<div class="info-card">', unsafe_allow_html=True)
