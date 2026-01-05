@@ -24,6 +24,13 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
 
+# Import price fetcher
+try:
+    from price_fetcher import price_fetcher
+    PRICE_FETCHER_AVAILABLE = True
+except ImportError:
+    PRICE_FETCHER_AVAILABLE = False
+
 
 class FuelType(Enum):
     """Fuel type enumeration with standard annual mileage"""
@@ -195,30 +202,55 @@ class OBVHyderabadEngine:
         age_years = age_days / 365.25
         return age_years
 
-    def get_current_new_price(self, make: str, model: str, variant: str, year: int) -> float:
+    def get_current_new_price(self, make: str, model: str, variant: str, year: int, fuel_type: FuelType = None) -> float:
         """
-        Fetch current new vehicle price (or estimate)
+        Fetch current new vehicle price using live search or fallback
 
-        In production, this should query a vehicle master database.
-        For now, we'll use a heuristic estimation.
+        Uses Google Search + Gemini to find current ex-showroom prices in Hyderabad.
+        Falls back to estimation if live search fails.
 
         Args:
             make: Vehicle manufacturer
             model: Model name
             variant: Specific trim/variant
             year: Manufacturing year
+            fuel_type: Fuel type (for live search)
 
         Returns:
-            Estimated current new price in INR
+            Current ex-showroom price in INR
         """
-        # TODO: Integrate with actual vehicle price database
-        # For now, using segment-based estimation
+        # Try live price fetcher first
+        if PRICE_FETCHER_AVAILABLE and fuel_type:
+            fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
 
-        # Segment mapping (rough estimation)
+            try:
+                price_data = price_fetcher.get_current_price(
+                    make=make,
+                    model=model,
+                    variant=variant,
+                    fuel=fuel_str,
+                    year=year
+                )
+
+                if price_data and price_data.get("source") != "fallback_estimate":
+                    # Use ex-showroom price from live search
+                    ex_showroom = price_data.get("ex_showroom_price")
+                    if ex_showroom and 300000 <= ex_showroom <= 15000000:
+                        self.recommendations.append(
+                            f"✅ Using live price data from {price_data.get('source', 'search')}: "
+                            f"₹{ex_showroom:,.0f}"
+                        )
+                        return ex_showroom
+
+            except Exception as e:
+                print(f"Price fetcher error: {e}")
+
+        # Fallback to segment-based estimation
         segments = {
             'alto': 450000,
             'kwid': 450000,
             'wagon r': 550000,
+            'wagonr': 550000,
             'santro': 500000,
             'swift': 650000,
             'baleno': 750000,
@@ -232,12 +264,38 @@ class OBVHyderabadEngine:
             'seltos': 1600000,
             'venue': 1200000,
             'brezza': 1100000,
+            'vitara brezza': 1100000,
             'ecosport': 1100000,
             'compass': 2500000,
             'harrier': 2000000,
             'fortuner': 3500000,
             'innova': 2500000,
+            'crysta': 2500000,
             'ertiga': 1000000,
+            'xuv': 1800000,
+            'thar': 1500000,
+            'nexon': 900000,
+            'punch': 700000,
+            'altroz': 700000,
+            'safari': 1800000,
+            'scorpio': 1600000,
+            'grand i10': 600000,
+            'elantra': 2000000,
+            'tucson': 3000000,
+            'kona': 2500000,
+            'alcazar': 1800000,
+            'sonet': 900000,
+            'carens': 1200000,
+            'carnival': 3500000,
+            'glanza': 700000,
+            'urban cruiser': 1100000,
+            'hyryder': 1200000,
+            'fronx': 800000,
+            'jimny': 1300000,
+            'ignis': 600000,
+            'dzire': 700000,
+            's-presso': 450000,
+            'eeco': 500000,
         }
 
         model_lower = model.lower()
@@ -248,14 +306,18 @@ class OBVHyderabadEngine:
                 base_price = price
                 break
 
-        # Adjust for inflation (6% per year from 2024)
+        # Adjust for inflation (6% per year from current year)
         current_year = datetime.now().year
         years_diff = current_year - year
 
-        # If it's an older model, inflate the base price to current equivalent
         if years_diff > 0:
             inflation_factor = 1.06 ** years_diff
             base_price = base_price * inflation_factor
+
+        self.warnings.append(
+            f"⚠️ Using estimated base price (₹{base_price:,.0f}). "
+            "Live price search unavailable or failed."
+        )
 
         return base_price
 
@@ -726,9 +788,9 @@ class OBVHyderabadEngine:
         # 1. Calculate vehicle age
         age_years = self.calculate_vehicle_age(vehicle.registration_date)
 
-        # 2. Get current new vehicle price
+        # 2. Get current new vehicle price (with live search)
         base_price = self.get_current_new_price(
-            vehicle.make, vehicle.model, vehicle.variant, vehicle.year
+            vehicle.make, vehicle.model, vehicle.variant, vehicle.year, vehicle.fuel_type
         )
 
         # 3. Calculate segmented depreciation
