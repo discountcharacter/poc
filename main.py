@@ -81,7 +81,7 @@ with col1:
     else:
         make = make_input
         
-    year = st.selectbox("Year", range(2025, 2005, -1), index=5)
+    year = st.selectbox("Year", range(2025, 1989, -1), index=5)
     variant = st.text_input("Variant", value="SX Petrol")
 with col2:
     model = st.text_input("Model", value="Creta")
