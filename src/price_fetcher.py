@@ -28,6 +28,13 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
 
+# Import direct scraper
+try:
+    from direct_price_scraper import get_direct_price
+    DIRECT_SCRAPER_AVAILABLE = True
+except ImportError:
+    DIRECT_SCRAPER_AVAILABLE = False
+
 
 class VehiclePriceFetcher:
     """
@@ -315,6 +322,7 @@ If you cannot find reliable pricing information, return:
         # Try to fetch live price
         print(f"🔍 Fetching live price for {make} {model} {variant} {fuel}...")
 
+        # Method 1: Try Google Custom Search + Gemini extraction
         search_results = self.search_google(make, model, variant, fuel, year)
 
         if search_results:
@@ -325,15 +333,30 @@ If you cannot find reliable pricing information, return:
                 price_data = {
                     "ex_showroom_price": ex_showroom,
                     "on_road_price": on_road,
-                    "source": "live_search"
+                    "source": "google_search"
                 }
 
                 # Cache the result
                 self.cache[cache_key] = (price_data, datetime.now())
                 return price_data
 
-        # Fallback to lookup table
-        print(f"⚠️ Live price not found, using fallback estimate for {make} {model}")
+        # Method 2: Try direct scraping if Google Search failed
+        if DIRECT_SCRAPER_AVAILABLE:
+            print(f"🔍 Google Search returned no results. Trying direct scraping...")
+            try:
+                direct_result = get_direct_price(make, model, variant, fuel)
+
+                if direct_result and direct_result.get("ex_showroom_price"):
+                    print(f"✅ Direct scraper found price!")
+                    # Cache and return
+                    self.cache[cache_key] = (direct_result, datetime.now())
+                    return direct_result
+
+            except Exception as e:
+                print(f"Direct scraper error: {e}")
+
+        # Method 3: Fallback to lookup table
+        print(f"⚠️ All live price methods failed, using fallback estimate for {make} {model}")
         fallback_price = self.get_fallback_price(make, model, year)
 
         price_data = {
