@@ -185,7 +185,7 @@ class VehiclePriceFetcher:
     """
 
     # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v8_space_fix"  # Fixed space-separated prices & official Maruti scraping
+    CACHE_VERSION = "v9_all_manufacturers"  # Added official scrapers for all major manufacturers
 
     def __init__(self, cache_duration_hours: int = 24):
         """

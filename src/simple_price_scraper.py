@@ -7,6 +7,13 @@ import re
 import requests
 from typing import Optional, Tuple
 
+# Import official website scrapers for all manufacturers
+try:
+    from official_website_scrapers import get_official_price
+    OFFICIAL_SCRAPERS_AVAILABLE = True
+except ImportError:
+    OFFICIAL_SCRAPERS_AVAILABLE = False
+
 
 def normalize_price(price_str: str) -> Optional[float]:
     """Convert price string like 'Rs.9.15 Lakh' or '₹5 78 900' to float"""
@@ -44,53 +51,6 @@ def normalize_price(price_str: str) -> Optional[float]:
         clean_str = price_str.replace(',', '').replace(' ', '')
         return float(clean_str)
     except:
-        return None
-
-
-def scrape_official_maruti(model: str, variant: str) -> Optional[Tuple[float, str]]:
-    """
-    Scrape official Maruti Suzuki website (ex-showroom prices - no conversion needed)
-
-    Returns:
-        Tuple of (ex_showroom_price, source_url) or None
-    """
-    try:
-        model_slug = model.lower().replace(' ', '-')
-        url = f"https://www.marutisuzuki.com/price-list/{model_slug}-price-in-hyderabad-in-telangana"
-
-        print(f"🔍 Simple scraper: Fetching official Maruti {url}")
-
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-
-        html = response.text
-        target_variant = variant.strip().upper()
-
-        print(f"   Looking for variant: {target_variant}")
-
-        # Official Maruti format: "Swift Lxi Price in hyderabad. ₹5 78 900.00"
-        pattern = rf'{model}\s+{variant}\s+Price\s+in\s+\w+\.\s*(?:Rs\.?|₹)\s*([\d,\.\s]+)'
-
-        match = re.search(pattern, html, re.IGNORECASE)
-        if match:
-            price_str = match.group(1)
-            print(f"   Matched official Maruti pattern: {price_str}")
-
-            price = normalize_price(price_str)
-
-            if price and 300000 <= price <= 15000000:
-                print(f"   ✅ Official Maruti ex-showroom: ₹{price:,.0f}")
-                return (price, url)  # Already ex-showroom, no conversion needed
-
-        print(f"   ❌ No match on official Maruti website")
-        return None
-
-    except Exception as e:
-        print(f"   ❌ Official Maruti scraper error: {e}")
         return None
 
 
@@ -255,12 +215,15 @@ def get_simple_price(make: str, model: str, variant: str, fuel: str = "Petrol") 
     """
     print(f"\n🎯 Simple scraper: {make} {model} {variant} ({fuel})")
 
-    # For Maruti Suzuki, try official website first (most accurate ex-showroom prices)
-    if 'maruti' in make.lower():
-        print("   Detected Maruti vehicle - trying official website first")
-        result = scrape_official_maruti(model, variant)
+    # Try official manufacturer website first (most accurate ex-showroom prices)
+    # Supports: Maruti, Hyundai, Tata, Honda, Toyota, Kia, Mahindra
+    if OFFICIAL_SCRAPERS_AVAILABLE:
+        print(f"   Trying official {make} website first...")
+        result = get_official_price(make, model, variant)
         if result:
+            print(f"   ✅ Got price from official {make} website")
             return result
+        print(f"   No match on official {make} website, trying aggregators...")
 
     # Try CarDekho (on-road prices)
     result = scrape_cardekho_simple(make, model, variant)
