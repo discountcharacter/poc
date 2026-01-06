@@ -63,22 +63,39 @@ def get_carwale_price(make: str, model: str, variant: str, fuel: str) -> Optiona
                     # Use Gemini to extract price from HTML
                     content_preview = response.text[:5000]  # First 5000 chars
 
-                    prompt = f"""Extract the current ex-showroom price for this vehicle from the CarWale page content.
+                    prompt = f"""Extract the ex-showroom price for the EXACT variant from this CarWale page.
 
-Vehicle: {make} {model} {variant} {fuel}
-Location: Hyderabad
+Vehicle:
+- Make: {make}
+- Model: {model}
+- Variant: {variant} ← CRITICAL: Extract price for THIS variant ONLY
+- Fuel: {fuel}
+- Location: Hyderabad
 
-Page Content:
+Page Content (HTML):
 {content_preview}
 
-Find the LATEST (2025-2026) ex-showroom price. Return ONLY valid JSON:
+INSTRUCTIONS:
+1. Look for variant "{variant}" specifically - ignore LXi, ZXi if searching for VXi
+2. Find ex-showroom price in formats:
+   - "₹6.59 Lakh" = 659000
+   - "Rs. 6,58,900" = 658900
+   - "Starts at ₹6.59 L" = 659000
+3. If table with multiple variants, extract row matching "{variant}"
+4. Ignore on-road/total prices (we only need ex-showroom)
+
+EXAMPLES:
+"VXi (Petrol) Rs.6,58,900" → {{"ex_showroom_price": 658900}}
+"Swift VXi | Price Starts at ₹6.59 Lakh" → {{"ex_showroom_price": 659000}}
+
+Return ONLY JSON (no other text):
 {{
     "ex_showroom_price": <number>,
-    "variant_found": "<variant name>",
-    "confidence": "<high/medium/low>"
+    "variant_found": "{variant}",
+    "confidence": "high"
 }}
 
-If no price found, return:
+If variant not found:
 {{"ex_showroom_price": null, "variant_found": null, "confidence": "low"}}
 """
 

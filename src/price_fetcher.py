@@ -187,50 +187,60 @@ class VehiclePriceFetcher:
                 for r in search_results
             ])
 
-            # Prompt for Gemini
-            prompt = f"""You are a vehicle pricing expert. Extract the CURRENT (2025-2026) ex-showroom and on-road prices for the following vehicle in Hyderabad, India.
+            # Improved prompt with specific examples and stricter instructions
+            prompt = f"""You are a vehicle pricing expert. Extract the CURRENT (2025-2026) ex-showroom price for the EXACT variant specified.
 
 Vehicle Details:
 - Make: {make}
 - Model: {model}
-- Variant: {variant}
+- Variant: {variant} ← THIS IS CRITICAL - ONLY extract price for THIS variant
 - Fuel Type: {fuel}
+- Location: Hyderabad
 
 Search Results:
 {context}
 
-Task:
-1. Find the most recent and reliable ex-showroom price and on-road price for this vehicle in Hyderabad
-2. If the exact variant is not found, use the closest variant with the same fuel type
-3. Prices should be in INR (Indian Rupees)
-4. Ignore used car prices - only look for NEW car prices
-5. On-road price should be higher than ex-showroom (includes road tax, insurance, registration)
+CRITICAL INSTRUCTIONS:
+1. ONLY extract price for variant "{variant}" - NOT other variants like LXi, ZXi, etc.
+2. Look for ex-showroom price in these formats:
+   - "₹6.59 Lakh" = 659000
+   - "Rs.6,58,900" = 658900
+   - "Price: ₹6.59 L" = 659000
+3. If on-road price not explicitly stated, calculate: on_road = ex_showroom × 1.20 (Hyderabad taxes ~20%)
+4. Ignore base variant (LXi) prices if searching for VXi/ZXi
+5. Prefer CarWale, CarDekho, Spinny, ZigWheels sources
+6. If you see a table with multiple variants, extract ONLY the row matching "{variant}"
 
-Return ONLY a JSON object in this exact format (no other text):
+EXAMPLES OF CORRECT EXTRACTION:
+Input: "VXi (Petrol) · Rs.6,58,900"
+Output: {{"ex_showroom_price": 658900}}
+
+Input: "Maruti Swift VXi | Price Starts at ₹6.59 Lakh"
+Output: {{"ex_showroom_price": 659000}}
+
+Input: "LXi: ₹5.79 Lakh | VXi: ₹6.59 Lakh | ZXi: ₹7.50 Lakh" (searching for VXi)
+Output: {{"ex_showroom_price": 659000}}
+
+Return ONLY valid JSON (no other text):
 {{
-    "ex_showroom_price": <price_in_rupees_as_number>,
-    "on_road_price": <price_in_rupees_as_number>,
-    "source": "<which website/source this came from>",
-    "confidence": "<high/medium/low>",
-    "notes": "<any relevant notes about the price>"
+    "ex_showroom_price": <number>,
+    "on_road_price": <number>,
+    "variant_matched": "{variant}",
+    "source": "CarWale/CarDekho/etc",
+    "confidence": "high"
 }}
 
-If you cannot find reliable pricing information, return:
-{{
-    "ex_showroom_price": null,
-    "on_road_price": null,
-    "source": "not_found",
-    "confidence": "low",
-    "notes": "No reliable pricing data found"
-}}
+If variant "{variant}" not found, return:
+{{"ex_showroom_price": null, "confidence": "low", "notes": "Variant {variant} not found in results"}}
 """
 
             # Use Gemini 2.0 Flash for extraction
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
-            response = model.generate_content(prompt)
+            model_ai = genai.GenerativeModel('gemini-2.0-flash-exp')
+            response = model_ai.generate_content(prompt)
 
             # Parse JSON response
             response_text = response.text.strip()
+            print(f"🤖 Gemini raw response: {response_text[:200]}...")
 
             # Remove markdown code blocks if present
             if response_text.startswith("```json"):
@@ -239,27 +249,37 @@ If you cannot find reliable pricing information, return:
                 response_text = response_text.replace("```", "").strip()
 
             price_data = json.loads(response_text)
+            print(f"📊 Parsed price data: {price_data}")
 
             # Validate the response
             ex_showroom = price_data.get("ex_showroom_price")
             on_road = price_data.get("on_road_price")
             confidence = price_data.get("confidence", "low")
 
-            if ex_showroom and on_road and confidence in ["high", "medium"]:
-                # Sanity checks
-                if (300000 <= ex_showroom <= 15000000 and  # Between 3L and 1.5Cr
-                    on_road > ex_showroom and  # On-road should be higher
-                    on_road <= ex_showroom * 1.5):  # But not more than 150%
+            # If on-road not provided, calculate it
+            if ex_showroom and not on_road:
+                on_road = ex_showroom * 1.20  # Hyderabad taxes ~20%
+                print(f"💡 Calculated on-road price: ₹{on_road:,.0f}")
 
+            if ex_showroom and confidence in ["high", "medium"]:
+                # Sanity checks
+                if 300000 <= ex_showroom <= 15000000:
                     print(f"✅ Gemini extracted price: Ex-showroom: ₹{ex_showroom:,.0f}, "
-                          f"On-road: ₹{on_road:,.0f} (Source: {price_data.get('source')})")
+                          f"On-road: ₹{on_road:,.0f} (Source: {price_data.get('source', 'unknown')})")
 
                     return (float(ex_showroom), float(on_road))
+                else:
+                    print(f"❌ Price validation failed: ₹{ex_showroom:,.0f} outside valid range")
 
+            print(f"❌ Extraction failed: ex_showroom={ex_showroom}, confidence={confidence}")
             return None
 
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON parse error: {e}")
+            print(f"Response was: {response_text[:500]}")
+            return None
         except Exception as e:
-            print(f"Gemini extraction error: {e}")
+            print(f"❌ Gemini extraction error: {e}")
             return None
 
     def get_fallback_price(self, make: str, model: str, year: int) -> float:
