@@ -187,39 +187,56 @@ class VehiclePriceFetcher:
                 for r in search_results
             ])
 
+            # Normalize variant for case-insensitive matching
+            variant_normalized = variant.strip().upper()
+
             # Improved prompt with specific examples and stricter instructions
             prompt = f"""You are a vehicle pricing expert. Extract the CURRENT (2025-2026) ex-showroom price for the EXACT variant specified.
 
 Vehicle Details:
 - Make: {make}
 - Model: {model}
-- Variant: {variant} ← THIS IS CRITICAL - ONLY extract price for THIS variant
+- Variant: {variant} (also matches: {variant.upper()}, {variant.lower()}, {variant.title()})
 - Fuel Type: {fuel}
 - Location: Hyderabad
 
 Search Results:
 {context}
 
-CRITICAL INSTRUCTIONS:
-1. ONLY extract price for variant "{variant}" - NOT other variants like LXi, ZXi, etc.
-2. Look for ex-showroom price in these formats:
+🚨 CRITICAL VARIANT MATCHING RULES:
+1. Variant "{variant}" can appear as: "{variant.upper()}", "{variant.lower()}", "{variant.title()}", "VXi", "VXI", "vxi"
+2. CASE-INSENSITIVE matching: "VXI" = "VXi" = "vxi"
+3. If searching for "VXI" or "VXi":
+   - ✅ CORRECT: Extract price for "VXi (Petrol) Rs.6,58,900" → 658900
+   - ❌ WRONG: Do NOT extract "LXi" price (₹5.79 Lakh) - this is BASE variant
+   - ❌ WRONG: Do NOT extract "ZXi" price - this is TOP variant
+4. Look for ex-showroom price in these formats:
    - "₹6.59 Lakh" = 659000
    - "Rs.6,58,900" = 658900
    - "Price: ₹6.59 L" = 659000
-3. If on-road price not explicitly stated, calculate: on_road = ex_showroom × 1.20 (Hyderabad taxes ~20%)
-4. Ignore base variant (LXi) prices if searching for VXi/ZXi
-5. Prefer CarWale, CarDekho, Spinny, ZigWheels sources
-6. If you see a table with multiple variants, extract ONLY the row matching "{variant}"
+5. If on-road price not stated, calculate: on_road = ex_showroom × 1.20 (Hyderabad ~20% taxes)
+6. Prefer CarWale, CarDekho, Spinny, ZigWheels sources
+7. If table with multiple variants, extract ONLY the row matching "{variant}" (case-insensitive)
+
+VARIANT HIERARCHY (for reference):
+- LXi/LXI = Base variant (cheapest)
+- VXi/VXI = Mid variant ← If this is requested, ONLY extract this
+- ZXi/ZXI = Top variant (most expensive)
 
 EXAMPLES OF CORRECT EXTRACTION:
-Input: "VXi (Petrol) · Rs.6,58,900"
-Output: {{"ex_showroom_price": 658900}}
+Input query: variant="VXI"
+Result snippet: "LXi: ₹5.79 Lakh | VXi: ₹6.59 Lakh | ZXi: ₹7.50 Lakh"
+Output: {{"ex_showroom_price": 659000, "variant_matched": "VXi"}}
+Reason: VXI matches VXi (case-insensitive), ignore LXi and ZXi
 
-Input: "Maruti Swift VXi | Price Starts at ₹6.59 Lakh"
-Output: {{"ex_showroom_price": 659000}}
+Input query: variant="VXi"
+Result snippet: "VXi (Petrol) · Rs.6,58,900"
+Output: {{"ex_showroom_price": 658900, "variant_matched": "VXi"}}
 
-Input: "LXi: ₹5.79 Lakh | VXi: ₹6.59 Lakh | ZXi: ₹7.50 Lakh" (searching for VXi)
-Output: {{"ex_showroom_price": 659000}}
+Input query: variant="VXI"
+Result snippet: "Swift LXi Rs.5,78,900 | Swift VXi Rs.6,58,900"
+Output: {{"ex_showroom_price": 658900, "variant_matched": "VXi"}}
+Reason: VXI = VXi, ignore LXi even though it's listed first
 
 Return ONLY valid JSON (no other text):
 {{
