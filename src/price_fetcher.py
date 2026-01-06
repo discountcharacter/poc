@@ -28,6 +28,113 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
 
+
+# Inline regex price extraction functions (no external module dependency)
+def normalize_price_inline(price_str: str) -> Optional[float]:
+    """Convert various price formats to float"""
+    if not price_str:
+        return None
+
+    import re
+    price_str = price_str.replace('₹', '').replace('Rs.', '').replace('Rs', '').strip()
+
+    if 'lakh' in price_str.lower() or ' l' in price_str.lower():
+        number_match = re.search(r'([\d,\.]+)', price_str)
+        if number_match:
+            try:
+                lakhs = float(number_match.group(1).replace(',', ''))
+                return lakhs * 100000
+            except:
+                return None
+    elif 'crore' in price_str.lower() or ' cr' in price_str.lower():
+        number_match = re.search(r'([\d,\.]+)', price_str)
+        if number_match:
+            try:
+                crores = float(number_match.group(1).replace(',', ''))
+                return crores * 10000000
+            except:
+                return None
+
+    price_str = price_str.replace(',', '').strip()
+    number_match = re.search(r'(\d+)', price_str)
+    if number_match:
+        try:
+            return float(number_match.group(1))
+        except:
+            return None
+    return None
+
+
+def extract_price_inline(search_results: list, variant: str) -> Optional[Tuple[float, str]]:
+    """Extract price for specific variant using regex patterns"""
+    import re
+
+    target_variant_normalized = variant.strip().upper()
+    all_matches = []
+    all_variants_found = []  # Track all variants found (for debugging)
+
+    patterns = [
+        r'([A-Za-z]+[A-Za-z0-9]*)\s*(?:\([^)]+\))?\s*[·•-]?\s*(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
+        r'([A-Za-z]+[A-Za-z0-9]*)\s*:\s*(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
+        r'([A-Za-z]+[A-Za-z0-9]*)\s*\|\s*Price.*?(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
+        r'([A-Za-z]+[A-Za-z0-9]*)\s+(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
+    ]
+
+    print(f"🔍 DEBUG: Looking for variant '{target_variant_normalized}'")
+
+    for idx, result in enumerate(search_results):
+        text = f"{result.get('title', '')} {result.get('snippet', '')}"
+        source_url = result.get('link', '')
+
+        print(f"   Result {idx+1}: {text[:150]}...")
+
+        for pattern_idx, pattern in enumerate(patterns):
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                variant_found = match.group(1).strip().upper()
+                price_str = match.group(2).strip()
+
+                # Track all variants found
+                all_variants_found.append(variant_found)
+
+                print(f"      Pattern {pattern_idx+1} found: {variant_found} = {price_str}")
+
+                if variant_found == target_variant_normalized:
+                    price = normalize_price_inline(price_str)
+                    if price and 300000 <= price <= 15000000:
+                        print(f"      ✅ MATCH! {variant_found} = ₹{price:,.0f}")
+                        all_matches.append({
+                            'price': price,
+                            'source': source_url,
+                            'variant': variant_found
+                        })
+                    else:
+                        print(f"      ❌ Price out of range: ₹{price}")
+                elif variant_found:
+                    print(f"      ⏭️  Skip: {variant_found} != {target_variant_normalized}")
+
+    # Print summary
+    print(f"📊 SUMMARY: Found {len(all_matches)} matches for '{target_variant_normalized}'")
+    print(f"   All variants detected: {set(all_variants_found)}")
+
+    if all_matches:
+        # Return most common price
+        price_counts = {}
+        for m in all_matches:
+            p_rounded = round(m['price'], -3)
+            price_counts[p_rounded] = price_counts.get(p_rounded, 0) + 1
+
+        most_common = max(price_counts, key=price_counts.get)
+        print(f"   Most common price: ₹{most_common:,.0f} (appeared {price_counts[most_common]} times)")
+
+        for m in all_matches:
+            if round(m['price'], -3) == most_common:
+                return (m['price'], m['source'])
+
+    print(f"❌ No valid matches found for variant '{target_variant_normalized}'")
+    return None
+
+
 # Import direct scraper
 try:
     from direct_price_scraper import get_direct_price
@@ -35,12 +142,24 @@ try:
 except ImportError:
     DIRECT_SCRAPER_AVAILABLE = False
 
-# Import robust regex extractor
+# Import robust regex extractor with path handling
 try:
+    import sys
+    import os
+    # Ensure src directory is in path
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+
     from robust_price_extractor import extract_price_for_variant
     REGEX_EXTRACTOR_AVAILABLE = True
-except ImportError:
+    print("✅ Robust regex extractor loaded successfully")
+except ImportError as e:
     REGEX_EXTRACTOR_AVAILABLE = False
+    print(f"❌ Regex extractor import failed: {e}")
+except Exception as e:
+    REGEX_EXTRACTOR_AVAILABLE = False
+    print(f"❌ Regex extractor error: {e}")
 
 
 class VehiclePriceFetcher:
@@ -49,7 +168,7 @@ class VehiclePriceFetcher:
     """
 
     # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v3_regex_extraction"  # Changed to use regex-based extraction
+    CACHE_VERSION = "v5_inline_regex"  # Inline regex extraction with enhanced diagnostics
 
     def __init__(self, cache_duration_hours: int = 24):
         """
@@ -372,16 +491,19 @@ If variant "{variant}" not found, return:
         # Method 1: Try Google Custom Search + Regex extraction (MOST RELIABLE)
         search_results = self.search_google(make, model, variant, fuel, year)
 
-        if search_results and REGEX_EXTRACTOR_AVAILABLE:
-            print(f"🔍 Trying regex-based variant extraction...")
+        if search_results:
+            # Try inline regex extraction first (most reliable)
+            print(f"🔍 Trying inline regex extraction for variant '{variant}'...")
+            print(f"   Search results count: {len(search_results)}")
             try:
-                regex_result = extract_price_for_variant(search_results, make, model, variant, fuel)
+                regex_result = extract_price_inline(search_results, variant)
 
                 if regex_result:
                     ex_showroom, source_url = regex_result
                     on_road = ex_showroom * 1.20  # Calculate on-road
 
-                    print(f"✅ Regex extracted: ₹{ex_showroom:,.0f} from {source_url[:50]}...")
+                    print(f"✅ Regex SUCCESS: ₹{ex_showroom:,.0f} for variant '{variant}'")
+                    print(f"   Source: {source_url[:80] if source_url else 'unknown'}...")
 
                     price_data = {
                         "ex_showroom_price": ex_showroom,
@@ -393,10 +515,13 @@ If variant "{variant}" not found, return:
                     self.cache[cache_key] = (price_data, datetime.now())
                     return price_data
                 else:
-                    print("⚠️ Regex extraction returned no match")
+                    print(f"⚠️ Inline regex extraction returned NO MATCH for variant '{variant}'")
+                    print("   Will fallback to Gemini extraction...")
 
             except Exception as e:
-                print(f"⚠️ Regex extraction error: {e}")
+                print(f"❌ Inline regex extraction ERROR: {e}")
+                import traceback
+                traceback.print_exc()
 
         # Method 1b: Fallback to Gemini extraction if regex failed
         if search_results:
