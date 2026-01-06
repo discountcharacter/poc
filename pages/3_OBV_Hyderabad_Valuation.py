@@ -30,7 +30,6 @@ try:
     PLOTLY_AVAILABLE = True
 except ImportError:
     PLOTLY_AVAILABLE = False
-    st.warning("📊 Plotly not installed. Install with: `pip install plotly` for enhanced visualizations.")
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -45,7 +44,7 @@ from obv_hyderabad_engine import (
 
 # Page configuration
 st.set_page_config(
-    page_title="OBV Hyderabad Valuation",
+    page_title="OBV Algo Valuation",
     page_icon="🏆",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -188,160 +187,147 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Header
-st.markdown('<h1 class="main-title">🏆 OBV Hyderabad Valuation Engine</h1>', unsafe_allow_html=True)
-st.markdown(
-    '<p class="subtitle">Orange Book Value Style Algorithmic Pricing • Hyderabad Market Calibrated • '
-    'Procurement Optimized</p>',
-    unsafe_allow_html=True
-)
+st.markdown('<h1 class="main-title">OBV Algo Valuation</h1>', unsafe_allow_html=True)
 
-# Info banner
-st.info(
-    "**🎯 Purpose:** This system provides accurate vehicle valuations for procurement (trade-in). "
-    "The **C2B Trade-In Price** is what your company should offer to purchase the vehicle from individuals. "
-    "It accounts for reconditioning costs and ensures profitable resale margins."
-)
+# Main content - Input Form
+st.markdown("### 📋 Vehicle Details")
 
-# Sidebar - Input Form
-with st.sidebar:
-    st.markdown("### 📋 Vehicle Details")
+# Basic Information
+st.markdown("#### Basic Information")
+make = st.text_input("Make", value="Maruti Suzuki", help="e.g., Maruti, Hyundai, Honda")
+model = st.text_input("Model", value="Swift", help="e.g., Swift, City, Creta")
+variant = st.text_input("Variant", value="VXI", help="e.g., VXi, SX, ZX+")
 
-    # Basic Information
-    st.markdown("#### Basic Information")
-    make = st.text_input("Make", value="Hyundai", help="e.g., Maruti, Hyundai, Honda")
-    model = st.text_input("Model", value="Creta", help="e.g., Swift, City, Creta")
-    variant = st.text_input("Variant", value="SX Diesel", help="e.g., VXi, SX, ZX+")
+col1, col2 = st.columns(2)
+with col1:
+    year = st.selectbox(
+        "Year",
+        options=list(range(datetime.now().year, 1989, -1)),
+        index=6,  # Default to 2020
+        help="Manufacturing year"
+    )
+with col2:
+    month = st.selectbox(
+        "Month",
+        options=list(range(1, 13)),
+        index=2,  # Default March
+        help="Registration month"
+    )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        year = st.selectbox(
-            "Year",
-            options=list(range(datetime.now().year, 1989, -1)),
-            index=5,  # Default to 5 years old
-            help="Manufacturing year"
-        )
-    with col2:
-        month = st.selectbox(
-            "Month",
-            options=list(range(1, 13)),
-            index=2,  # Default March
-            help="Registration month"
-        )
+# Calculate registration date
+try:
+    reg_date = date(year, month, 15)  # Use 15th as default day
+except:
+    reg_date = date(year, 1, 15)
 
-    # Calculate registration date
-    try:
-        reg_date = date(year, month, 15)  # Use 15th as default day
-    except:
-        reg_date = date(year, 1, 15)
+# Fuel and Transmission
+col1, col2 = st.columns(2)
+with col1:
+    fuel_type_str = st.selectbox(
+        "Fuel Type",
+        options=["Petrol", "Diesel", "CNG", "Electric"],
+        index=0,  # Default Petrol
+        help="Fuel type affects standard mileage expectations"
+    )
+with col2:
+    transmission = st.selectbox(
+        "Transmission",
+        options=["Manual", "Automatic"],
+        index=0
+    )
 
-    # Fuel and Transmission
-    col1, col2 = st.columns(2)
-    with col1:
-        fuel_type_str = st.selectbox(
-            "Fuel Type",
-            options=["Petrol", "Diesel", "CNG", "Electric"],
-            index=1,  # Default Diesel
-            help="Fuel type affects standard mileage expectations"
-        )
-    with col2:
-        transmission = st.selectbox(
-            "Transmission",
-            options=["Manual", "Automatic"],
-            index=0
-        )
+# Convert fuel type string to enum
+fuel_type = FuelType[fuel_type_str.upper()]
 
-    # Convert fuel type string to enum
-    fuel_type = FuelType[fuel_type_str.upper()]
+# Usage Information
+st.markdown("#### Usage Information")
+col1, col2 = st.columns(2)
+with col1:
+    odometer = st.number_input(
+        "Odometer (km)",
+        min_value=0,
+        max_value=500000,
+        value=75000,
+        step=1000,
+        help="Total kilometers driven"
+    )
+with col2:
+    owners = st.selectbox(
+        "Number of Owners",
+        options=[1, 2, 3, 4],
+        index=0,
+        help="Number of previous owners"
+    )
 
-    # Usage Information
-    st.markdown("#### Usage Information")
-    col1, col2 = st.columns(2)
-    with col1:
-        odometer = st.number_input(
-            "Odometer (km)",
-            min_value=0,
-            max_value=500000,
-            value=75000,
-            step=1000,
-            help="Total kilometers driven"
-        )
-    with col2:
-        owners = st.selectbox(
-            "Number of Owners",
-            options=[1, 2, 3, 4],
-            index=0,
-            help="Number of previous owners"
-        )
+location = st.text_input("Location", value="Hyderabad", help="City/Region")
 
-    location = st.text_input("Location", value="Hyderabad", help="City/Region")
+# Condition Inspection
+st.markdown("#### 🔍 Condition Inspection (16-Point)")
 
-    # Condition Inspection
-    st.markdown("#### 🔍 Condition Inspection (16-Point)")
+with st.expander("🚗 Body & Exterior", expanded=False):
+    frame_damage = st.checkbox("Frame Damage", value=False, help="Critical structural damage")
+    dents_scratches = st.select_slider(
+        "Dents & Scratches",
+        options=["None", "Minor", "Moderate", "Severe"],
+        value="Minor"
+    )
+    repainted = st.checkbox("Repainted", value=False, help="Any panels repainted")
+    rust_present = st.checkbox("Rust Present", value=False)
 
-    with st.expander("🚗 Body & Exterior", expanded=False):
-        frame_damage = st.checkbox("Frame Damage", value=False, help="Critical structural damage")
-        dents_scratches = st.select_slider(
-            "Dents & Scratches",
-            options=["None", "Minor", "Moderate", "Severe"],
-            value="Minor"
-        )
-        repainted = st.checkbox("Repainted", value=False, help="Any panels repainted")
-        rust_present = st.checkbox("Rust Present", value=False)
+with st.expander("🔧 Engine & Transmission", expanded=False):
+    engine_smoke = st.selectbox(
+        "Engine Smoke",
+        options=["None", "White", "Black"],
+        index=0,
+        help="Smoke from exhaust"
+    )
+    engine_noise = st.selectbox(
+        "Engine Noise",
+        options=["Normal", "Slight", "Heavy"],
+        index=0
+    )
+    transmission_condition = st.selectbox(
+        "Transmission Condition",
+        options=["Smooth", "Rough", "Slipping"],
+        index=0
+    )
 
-    with st.expander("🔧 Engine & Transmission", expanded=False):
-        engine_smoke = st.selectbox(
-            "Engine Smoke",
-            options=["None", "White", "Black"],
-            index=0,
-            help="Smoke from exhaust"
-        )
-        engine_noise = st.selectbox(
-            "Engine Noise",
-            options=["Normal", "Slight", "Heavy"],
-            index=0
-        )
-        transmission_condition = st.selectbox(
-            "Transmission Condition",
-            options=["Smooth", "Rough", "Slipping"],
-            index=0
-        )
+with st.expander("⚙️ Mechanical Components", expanded=False):
+    tire_tread = st.slider(
+        "Tire Tread Remaining (%)",
+        min_value=0,
+        max_value=100,
+        value=60,
+        step=5
+    )
+    suspension_condition = st.selectbox(
+        "Suspension",
+        options=["Excellent", "Good", "Fair", "Poor"],
+        index=1
+    )
+    brake_condition = st.selectbox(
+        "Brakes",
+        options=["Excellent", "Good", "Fair", "Poor"],
+        index=1
+    )
 
-    with st.expander("⚙️ Mechanical Components", expanded=False):
-        tire_tread = st.slider(
-            "Tire Tread Remaining (%)",
-            min_value=0,
-            max_value=100,
-            value=60,
-            step=5
-        )
-        suspension_condition = st.selectbox(
-            "Suspension",
-            options=["Excellent", "Good", "Fair", "Poor"],
-            index=1
-        )
-        brake_condition = st.selectbox(
-            "Brakes",
-            options=["Excellent", "Good", "Fair", "Poor"],
-            index=1
-        )
+with st.expander("⚡ Electrical & Comfort", expanded=False):
+    ac_working = st.checkbox("AC Working", value=True)
+    electrical_issues = st.checkbox("Electrical Issues", value=False)
+    interior_condition = st.selectbox(
+        "Interior Condition",
+        options=["Excellent", "Good", "Fair", "Poor"],
+        index=1
+    )
 
-    with st.expander("⚡ Electrical & Comfort", expanded=False):
-        ac_working = st.checkbox("AC Working", value=True)
-        electrical_issues = st.checkbox("Electrical Issues", value=False)
-        interior_condition = st.selectbox(
-            "Interior Condition",
-            options=["Excellent", "Good", "Fair", "Poor"],
-            index=1
-        )
+with st.expander("📄 Documentation", expanded=False):
+    service_history = st.checkbox("Service History Available", value=True)
+    insurance_valid = st.checkbox("Insurance Valid", value=True)
+    accident_history = st.checkbox("Accident History", value=False)
 
-    with st.expander("📄 Documentation", expanded=False):
-        service_history = st.checkbox("Service History Available", value=True)
-        insurance_valid = st.checkbox("Insurance Valid", value=True)
-        accident_history = st.checkbox("Accident History", value=False)
-
-    # Calculate button
-    st.markdown("---")
-    calculate_btn = st.button("🚀 Calculate Valuation", type="primary", use_container_width=True)
+# Calculate button
+st.markdown("---")
+calculate_btn = st.button("🚀 Calculate Valuation", type="primary", use_container_width=True)
 
 # Main content area
 if calculate_btn:
@@ -390,9 +376,15 @@ if calculate_btn:
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Vehicle", f"{year} {make} {model}")
+        st.markdown(f"""
+        <div style="font-size: 0.85rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Vehicle</div>
+        <div style="font-size: 1.1rem; font-weight: 600; margin-top: 0.3rem;">{year} {make} {model}</div>
+        """, unsafe_allow_html=True)
     with col2:
-        st.metric("Odometer", f"{odometer:,} km")
+        st.markdown(f"""
+        <div style="font-size: 0.85rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Odometer</div>
+        <div style="font-size: 1.1rem; font-weight: 600; margin-top: 0.3rem;">{odometer:,} km</div>
+        """, unsafe_allow_html=True)
     with col3:
         # Condition badge
         condition_class = result.condition_grade.value.lower().replace(" ", "-")
@@ -403,7 +395,10 @@ if calculate_btn:
         st.caption(f"Condition Score: {result.condition_score}/100")
     with col4:
         age = (date.today() - reg_date).days / 365.25
-        st.metric("Age", f"{age:.1f} years")
+        st.markdown(f"""
+        <div style="font-size: 0.85rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Age</div>
+        <div style="font-size: 1.1rem; font-weight: 600; margin-top: 0.3rem;">{age:.1f} years</div>
+        """, unsafe_allow_html=True)
 
     # PROCUREMENT PRICING - HERO SECTION
     st.markdown('<div class="section-header">💰 Procurement Pricing (C2B - Company Buying)</div>', unsafe_allow_html=True)
@@ -663,164 +658,12 @@ if calculate_btn:
             - Local road tax considerations
             """)
 
-    # Methodology
-    with st.expander("📚 Valuation Methodology"):
-        st.markdown("""
-        ### OBV-Style Algorithmic Valuation
-
-        This engine implements a comprehensive multi-factor valuation model based on Orange Book Value (OBV)
-        methodology, specifically calibrated for the Hyderabad automotive market.
-
-        #### Core Algorithm Components:
-
-        1. **IRDAI-Based Segmented Depreciation**
-           - Follows Insurance Regulatory guidelines as baseline
-           - Uses continuous decay function instead of step functions
-           - Segmented rates: 17% → 11% → 9% → 6% by age brackets
-           - Links to current new vehicle price, not historical invoice
-
-        2. **Odometer Deviation Analysis**
-           - Calculates expected mileage based on fuel type
-           - Standard annual mileage: Petrol (11k), Diesel (16.5k), CNG (20k), Electric (11k)
-           - Non-linear penalty tiers: 2% → 4% → 8% → 6%
-           - Psychological barriers at 50k, 100k km
-           - Tampering detection safeguards
-
-        3. **16-Point Condition Scoring**
-           - Weighted inspection across 5 categories
-           - Engine/Transmission (35%), Body/Frame (25%), Mechanical (15%), Comfort (15%), Documentation (10%)
-           - Maps to 4 grades: Excellent, Very Good, Good, Fair
-           - Grade multipliers: 1.10x, 1.05x, 1.00x, 0.85x
-
-        4. **Transaction Context Pricing**
-           - C2C: Fair Market Value (baseline)
-           - C2B: Trade-in (FMV - 12% margin) ← **PROCUREMENT FOCUS**
-           - B2C: Retail (FMV + 12% margin + 18% GST on margin)
-           - B2B: Wholesale (FMV - 20%)
-
-        5. **Ownership Factor**
-           - 1st owner: 1.00x (no penalty)
-           - 2nd owner: 0.93x (-7%)
-           - 3rd owner: 0.85x (-15%)
-           - 4th+ owner: 0.75x (-25%)
-
-        6. **Hyderabad Location Factor**
-           - Diesel premium: 1.05x (no age ban)
-           - Tech hub premium: 1.03x (high demand segments)
-           - Road tax adjustments for out-of-state registrations
-
-        #### Data Sources:
-        - Vehicle master database (make/model/variant pricing)
-        - IRDAI depreciation schedule (regulatory baseline)
-        - Market research (Hyderabad-specific demand coefficients)
-        - Historical transaction data (calibration)
-
-        #### Accuracy & Validation:
-        - Segmented depreciation ensures realistic curves
-        - Condition scoring eliminates subjective bias
-        - Transaction context provides actionable prices
-        - Hyderabad calibration accounts for local market dynamics
-
-        #### For Procurement Use:
-        - Focus on **C2B Trade-In Price**
-        - Conservative estimates to protect profit margins
-        - Built-in reconditioning cost buffer
-        - Negotiation range (95%-100% of calculated C2B)
-        - Warnings flag high-risk vehicles
-        """)
-
-else:
-    # Landing state - show info
-    st.markdown('<div class="section-header">🎯 How It Works</div>', unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown("""
-        <div class="info-card">
-            <h3>1️⃣ Enter Vehicle Details</h3>
-            <p>Fill in the basic vehicle information: Make, Model, Year, Odometer, etc.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("""
-        <div class="info-card">
-            <h3>2️⃣ Complete Inspection</h3>
-            <p>Provide detailed 16-point condition assessment for accurate valuation.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        st.markdown("""
-        <div class="info-card">
-            <h3>3️⃣ Get Valuation</h3>
-            <p>Receive comprehensive pricing across all transaction contexts with detailed breakdown.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown('<div class="section-header">✨ Key Features</div>', unsafe_allow_html=True)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("""
-        ### 🔬 Advanced Algorithms
-        - **IRDAI-based segmented depreciation** with continuous decay
-        - **Tiered odometer penalties** (non-linear impact)
-        - **16-point condition scoring** with weighted components
-        - **Hyderabad-specific market calibration**
-
-        ### 💼 Procurement Optimized
-        - **C2B Trade-In Pricing** for company purchases
-        - **Conservative estimates** to ensure profitability
-        - **Negotiation ranges** for flexibility
-        - **Risk warnings** for problematic vehicles
-        """)
-
-    with col2:
-        st.markdown("""
-        ### 📊 Comprehensive Insights
-        - **4 transaction prices** (C2C, B2C, C2B, B2B)
-        - **Detailed breakdowns** of all adjustments
-        - **Visual waterfall chart** showing calculation flow
-        - **Warnings & recommendations** for decision support
-
-        ### 🏆 Market Accuracy
-        - **Current new prices** (not historical invoices)
-        - **Fuel-type specific** mileage expectations
-        - **Ownership impact** on resale value
-        - **GST calculations** for dealer transactions
-        """)
-
-    st.markdown('<div class="section-header">📈 Sample Valuations</div>', unsafe_allow_html=True)
-
-    # Sample comparisons
-    sample_data = {
-        "Vehicle": [
-            "2019 Hyundai Creta SX Diesel",
-            "2020 Maruti Baleno Delta Petrol",
-            "2018 Honda City VX Petrol"
-        ],
-        "Odometer": ["75,000 km", "45,000 km", "95,000 km"],
-        "Condition": ["Good", "Very Good", "Fair"],
-        "C2B Trade-In": ["₹8,45,000", "₹5,32,000", "₹4,85,000"],
-        "Fair Market Value": ["₹9,60,000", "₹6,05,000", "₹5,52,000"],
-        "Retail Price": ["₹11,45,000", "₹7,22,000", "₹6,58,000"]
-    }
-
-    st.dataframe(pd.DataFrame(sample_data), use_container_width=True, hide_index=True)
-
-    st.info(
-        "💡 **Tip:** The C2B Trade-In price is optimized for your company's procurement. "
-        "It ensures sufficient margin for reconditioning and profitable resale."
-    )
 
 # Footer
 st.markdown("""
 <div class="footer">
-    <strong>OBV Hyderabad Valuation Engine v1.0</strong><br>
-    Powered by Advanced Algorithmic Pricing • Hyderabad Market Calibrated<br>
+    <strong>OBV Algo Valuation v1.0</strong><br>
+    Powered by Advanced Algorithmic Pricing<br>
     <em>For procurement and trade-in pricing accuracy</em>
 </div>
 """, unsafe_allow_html=True)
