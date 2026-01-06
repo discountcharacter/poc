@@ -71,6 +71,7 @@ def extract_price_inline(search_results: list, variant: str) -> Optional[Tuple[f
 
     target_variant_normalized = variant.strip().upper()
     all_matches = []
+    all_variants_found = []  # Track all variants found (for debugging)
 
     patterns = [
         r'([A-Za-z]+[A-Za-z0-9]*)\s*(?:\([^)]+\))?\s*[·•-]?\s*(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
@@ -79,24 +80,42 @@ def extract_price_inline(search_results: list, variant: str) -> Optional[Tuple[f
         r'([A-Za-z]+[A-Za-z0-9]*)\s+(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
     ]
 
-    for result in search_results:
+    print(f"🔍 DEBUG: Looking for variant '{target_variant_normalized}'")
+
+    for idx, result in enumerate(search_results):
         text = f"{result.get('title', '')} {result.get('snippet', '')}"
         source_url = result.get('link', '')
 
-        for pattern in patterns:
+        print(f"   Result {idx+1}: {text[:150]}...")
+
+        for pattern_idx, pattern in enumerate(patterns):
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for match in matches:
                 variant_found = match.group(1).strip().upper()
                 price_str = match.group(2).strip()
 
+                # Track all variants found
+                all_variants_found.append(variant_found)
+
+                print(f"      Pattern {pattern_idx+1} found: {variant_found} = {price_str}")
+
                 if variant_found == target_variant_normalized:
                     price = normalize_price_inline(price_str)
                     if price and 300000 <= price <= 15000000:
+                        print(f"      ✅ MATCH! {variant_found} = ₹{price:,.0f}")
                         all_matches.append({
                             'price': price,
                             'source': source_url,
                             'variant': variant_found
                         })
+                    else:
+                        print(f"      ❌ Price out of range: ₹{price}")
+                elif variant_found:
+                    print(f"      ⏭️  Skip: {variant_found} != {target_variant_normalized}")
+
+    # Print summary
+    print(f"📊 SUMMARY: Found {len(all_matches)} matches for '{target_variant_normalized}'")
+    print(f"   All variants detected: {set(all_variants_found)}")
 
     if all_matches:
         # Return most common price
@@ -106,10 +125,13 @@ def extract_price_inline(search_results: list, variant: str) -> Optional[Tuple[f
             price_counts[p_rounded] = price_counts.get(p_rounded, 0) + 1
 
         most_common = max(price_counts, key=price_counts.get)
+        print(f"   Most common price: ₹{most_common:,.0f} (appeared {price_counts[most_common]} times)")
+
         for m in all_matches:
             if round(m['price'], -3) == most_common:
                 return (m['price'], m['source'])
 
+    print(f"❌ No valid matches found for variant '{target_variant_normalized}'")
     return None
 
 
@@ -146,7 +168,7 @@ class VehiclePriceFetcher:
     """
 
     # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v4_regex_fix"  # Fixed regex import and added diagnostics
+    CACHE_VERSION = "v5_inline_regex"  # Inline regex extraction with enhanced diagnostics
 
     def __init__(self, cache_duration_hours: int = 24):
         """
