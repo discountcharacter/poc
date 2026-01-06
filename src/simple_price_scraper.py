@@ -210,30 +210,35 @@ def get_simple_price(make: str, model: str, variant: str, fuel: str = "Petrol") 
     """
     Get variant price using simple string matching
 
+    Priority order optimized for coverage and reliability:
+    1. CarDekho/CarWale (most comprehensive, covers ALL manufacturers)
+    2. Official websites (for additional validation when available)
+
     Returns:
         Tuple of (ex_showroom_price, source_url) or None
     """
     print(f"\n🎯 Simple scraper: {make} {model} {variant} ({fuel})")
 
-    # Try official manufacturer website first (most accurate ex-showroom prices)
-    # Supports: Maruti, Hyundai, Tata, Honda, Toyota, Kia, Mahindra
-    if OFFICIAL_SCRAPERS_AVAILABLE:
-        print(f"   Trying official {make} website first...")
-        result = get_official_price(make, model, variant)
-        if result:
-            print(f"   ✅ Got price from official {make} website")
-            return result
-        print(f"   No match on official {make} website, trying aggregators...")
-
-    # Try CarDekho (on-road prices)
+    # Priority 1: CarDekho - Most comprehensive coverage
+    # Covers ALL manufacturers including discontinued (Ford, Chevrolet, Fiat)
     result = scrape_cardekho_simple(make, model, variant)
     if result:
         return result
 
-    # Try CarWale (on-road prices)
+    # Priority 2: CarWale - Alternative aggregator
     result = scrape_carwale_simple(make, model, variant)
     if result:
         return result
+
+    # Priority 3: Official manufacturer website (as fallback)
+    # Only for active brands: Maruti, Hyundai, Tata, Honda, Toyota, Kia, Mahindra
+    # May miss discontinued brands or specific variants
+    if OFFICIAL_SCRAPERS_AVAILABLE:
+        print(f"   Aggregators didn't find it, trying official {make} website...")
+        result = get_official_price(make, model, variant)
+        if result:
+            print(f"   ✅ Got price from official {make} website")
+            return result
 
     print("❌ Simple scraper failed on all sources")
     return None
