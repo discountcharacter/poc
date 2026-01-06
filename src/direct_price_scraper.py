@@ -68,25 +68,36 @@ def get_carwale_price(make: str, model: str, variant: str, fuel: str) -> Optiona
 Vehicle:
 - Make: {make}
 - Model: {model}
-- Variant: {variant} ← CRITICAL: Extract price for THIS variant ONLY
+- Variant: {variant} (matches: {variant.upper()}, {variant.lower()}, {variant.title()})
 - Fuel: {fuel}
 - Location: Hyderabad
 
 Page Content (HTML):
 {content_preview}
 
-INSTRUCTIONS:
-1. Look for variant "{variant}" specifically - ignore LXi, ZXi if searching for VXi
-2. Find ex-showroom price in formats:
+🚨 CRITICAL VARIANT MATCHING:
+1. CASE-INSENSITIVE: "{variant}" = "{variant.upper()}" = "{variant.lower()}" = "{variant.title()}"
+2. If searching for "VXI"/"VXi":
+   - ✅ Extract "VXi (Petrol) Rs.6,58,900" → 658900
+   - ❌ IGNORE "LXi" price (₹5.79L) - this is BASE variant
+   - ❌ IGNORE "ZXi" price - this is TOP variant
+3. Find ex-showroom price formats:
    - "₹6.59 Lakh" = 659000
    - "Rs. 6,58,900" = 658900
    - "Starts at ₹6.59 L" = 659000
-3. If table with multiple variants, extract row matching "{variant}"
-4. Ignore on-road/total prices (we only need ex-showroom)
+4. If table with multiple variants, extract row matching "{variant}" (case-insensitive)
+5. Ignore on-road/total prices (ex-showroom only)
+
+VARIANT HIERARCHY:
+- LXi/LXI = Base (cheapest)
+- VXi/VXI = Mid ← If this requested, ONLY extract this
+- ZXi/ZXI = Top (expensive)
 
 EXAMPLES:
-"VXi (Petrol) Rs.6,58,900" → {{"ex_showroom_price": 658900}}
-"Swift VXi | Price Starts at ₹6.59 Lakh" → {{"ex_showroom_price": 659000}}
+Query: variant="VXI"
+HTML: "LXi: Rs.5,78,900 | VXi: Rs.6,58,900 | ZXi: Rs.7,50,000"
+Output: {{"ex_showroom_price": 658900, "variant_found": "VXi"}}
+Reason: VXI matches VXi, ignore LXi and ZXi
 
 Return ONLY JSON (no other text):
 {{
