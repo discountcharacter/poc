@@ -185,7 +185,7 @@ class VehiclePriceFetcher:
     """
 
     # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v10_aggregator_priority"  # Prioritized CarDekho/CarWale over official sites
+    CACHE_VERSION = "v11_strict_variant_matching"  # Strict regex patterns + cross-variant validation
 
     def __init__(self, cache_duration_hours: int = 24):
         """

@@ -85,41 +85,60 @@ def scrape_cardekho_simple(make: str, model: str, variant: str) -> Optional[Tupl
         print(f"   Looking for variant: {target_variant}")
 
         # Strategy 1: Look for patterns like "Baleno Zeta Rs.9.15 Lakh" or "Swift Lxi ₹5 78 900"
-        # Case-insensitive search, handles spaces in numbers
+        # STRICT matching - variant and price must be on same line, very close together
         patterns = [
-            # Pattern 0: Official Maruti Suzuki format "Swift Lxi Price in hyderabad. ₹5 78 900.00"
-            rf'{model}\s+{variant}\s+Price\s+in\s+\w+\.\s*(?:Rs\.?|₹)\s*([\d,\.\s]+)',
+            # Pattern 1: STRICT - Variant directly followed by price (max 20 chars between)
+            # Matches: "VXI Rs.6.59 Lakh" or "VXI, Rs.6.59 Lakh" or "VXI: Rs.6.59 Lakh"
+            rf'\b{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
 
-            # Pattern 1: "Model Variant Rs.X.XX Lakh" or "Model Variant ₹X XX XXX"
-            rf'{model}\s+{variant}\s*(?:Price[^₹]*)?[,\.\s]*(?:Rs\.?|₹)\s*([\d,\.\s]+(?:\s*Lakh)?)',
+            # Pattern 2: Model + Variant + Price on same line (max 30 chars)
+            # Matches: "Swift VXI Rs.6.59 Lakh"
+            rf'\b{model}\s+{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
 
-            # Pattern 2: "Variant Rs.X.XX Lakh" or "Variant ₹X XX XXX"
-            rf'{variant}\s*(?:Price[^₹]*)?[,\.\s]*(?:Rs\.?|₹)\s*([\d,\.\s]+(?:\s*Lakh)?)',
+            # Pattern 3: Variant in parentheses with fuel type
+            # Matches: "VXI(Petrol) Rs.6.59 Lakh"
+            rf'\b{variant}\s*\([^)]+\)[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
 
-            # Pattern 3: "Variant(Petrol) Rs.X.XX Lakh"
-            rf'{variant}\s*\([^)]*\)\s*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*Lakh)',
-
-            # Pattern 4: In table row format
-            rf'>{variant}<.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*Lakh)',
-
-            # Pattern 5: Variant with price on same line (loose match)
-            rf'{variant}[^₹<>]*?(?:Rs\.?|₹)\s*([\d,\.\s]+)(?:\s*Lakh|\s*\.00)?',
+            # Pattern 4: Table cell format (variant in one tag, price nearby)
+            # Matches: "<td>VXI</td><td>Rs.6.59 Lakh</td>"
+            rf'>{variant}\s*<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
         ]
 
         found_prices = []
+        found_variants = []  # Track which variants we found (for debugging)
+
+        # Common variant names to check for cross-contamination
+        other_variants = ['LXI', 'VXI', 'ZXI', 'LX', 'VX', 'ZX', 'SIGMA', 'DELTA', 'ZETA', 'ALPHA',
+                         'AMBIENTE', 'TREND', 'TITANIUM', 'S', 'SX', 'EX', 'E', 'S+', 'SX+']
+        other_variants = [v for v in other_variants if v.upper() != target_variant]
 
         for pattern in patterns:
             matches = re.finditer(pattern, html, re.IGNORECASE | re.DOTALL)
             for match in matches:
+                matched_text = match.group(0)
                 price_str = match.group(1)
-                print(f"   Pattern matched: '{match.group(0)[:100]}...'")
+
+                print(f"   Pattern matched: '{matched_text[:100]}'")
                 print(f"   Extracted price string: {price_str}")
+
+                # VALIDATION: Check if matched text contains OTHER variant names
+                # This prevents matching "LXI ... VXI ... Rs.7.50" where price is for ZXI
+                contains_other_variant = False
+                for other_var in other_variants:
+                    if re.search(rf'\b{other_var}\b', matched_text, re.IGNORECASE):
+                        print(f"   ⚠️ REJECTED: Contains other variant '{other_var}' - likely wrong price")
+                        contains_other_variant = True
+                        break
+
+                if contains_other_variant:
+                    continue  # Skip this match
 
                 price = normalize_price(price_str + " Lakh" if "Lakh" not in price_str else price_str)
 
                 if price and 300000 <= price <= 15000000:
                     found_prices.append(price)
-                    print(f"   Valid price found: ₹{price:,.0f}")
+                    found_variants.append(target_variant)
+                    print(f"   ✅ Valid price found: ₹{price:,.0f}")
 
         if found_prices:
             # Use median price if multiple found
@@ -168,27 +187,46 @@ def scrape_carwale_simple(make: str, model: str, variant: str) -> Optional[Tuple
         target_variant = variant.strip().upper()
         print(f"   Looking for variant: {target_variant}")
 
-        # Similar patterns as CarDekho, handles space-separated numbers
+        # STRICT patterns - same as CarDekho
         patterns = [
-            rf'{model}\s+{variant}\s*(?:Price[^₹]*)?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
-            rf'{variant}\s*(?:Price[^₹]*)?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
-            rf'{variant}\s*\([^)]*\).*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L))',
-            rf'>{variant}<.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L))',
+            rf'\b{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            rf'\b{model}\s+{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            rf'\b{variant}\s*\([^)]+\)[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            rf'>{variant}\s*<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
         ]
 
         found_prices = []
 
+        # Common variant names to check for cross-contamination
+        other_variants = ['LXI', 'VXI', 'ZXI', 'LX', 'VX', 'ZX', 'SIGMA', 'DELTA', 'ZETA', 'ALPHA',
+                         'AMBIENTE', 'TREND', 'TITANIUM', 'S', 'SX', 'EX', 'E', 'S+', 'SX+']
+        other_variants = [v for v in other_variants if v.upper() != target_variant]
+
         for pattern in patterns:
             matches = re.finditer(pattern, html, re.IGNORECASE | re.DOTALL)
             for match in matches:
+                matched_text = match.group(0)
                 price_str = match.group(1)
-                print(f"   Extracted: {price_str}")
+
+                print(f"   Matched: '{matched_text[:100]}'")
+                print(f"   Price: {price_str}")
+
+                # VALIDATION: Reject if contains other variant names
+                contains_other_variant = False
+                for other_var in other_variants:
+                    if re.search(rf'\b{other_var}\b', matched_text, re.IGNORECASE):
+                        print(f"   ⚠️ REJECTED: Contains '{other_var}' - wrong variant")
+                        contains_other_variant = True
+                        break
+
+                if contains_other_variant:
+                    continue
 
                 price = normalize_price(price_str)
 
                 if price and 300000 <= price <= 15000000:
                     found_prices.append(price)
-                    print(f"   Valid price: ₹{price:,.0f}")
+                    print(f"   ✅ Valid: ₹{price:,.0f}")
 
         if found_prices:
             median_price = sorted(found_prices)[len(found_prices) // 2]
