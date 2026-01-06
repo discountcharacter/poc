@@ -257,6 +257,14 @@ class OBVHyderabadEngine:
                     source = price_data.get("source")
                     print(f"📊 Price data received. Source: {source}")
 
+                    # Add diagnostic info about extraction method
+                    if source == "regex_extraction":
+                        self.recommendations.append("🔍 Extraction method: Regex pattern matching (most reliable)")
+                    elif source == "gemini_extraction":
+                        self.warnings.append("⚠️ Regex extraction failed - fell back to Gemini (less reliable for variant matching)")
+                    elif source == "carwale_direct":
+                        self.recommendations.append("🔍 Extraction method: Direct CarWale scraping")
+
                     if source != "fallback_estimate":
                         # Use ex-showroom price from live search
                         ex_showroom = price_data.get("ex_showroom_price")
