@@ -135,7 +135,16 @@ def extract_price_inline(search_results: list, variant: str) -> Optional[Tuple[f
     return None
 
 
-# Import CarWale scraper (most reliable for variant-specific prices)
+# Import simple scraper (MOST RELIABLE - no BeautifulSoup dependency)
+try:
+    from simple_price_scraper import get_simple_price
+    SIMPLE_SCRAPER_AVAILABLE = True
+    print("✅ Simple price scraper loaded")
+except ImportError as e:
+    SIMPLE_SCRAPER_AVAILABLE = False
+    print(f"⚠️ Simple price scraper not available: {e}")
+
+# Import CarWale scraper (requires BeautifulSoup)
 try:
     from carwale_scraper import get_variant_price
     CARWALE_SCRAPER_AVAILABLE = True
@@ -176,7 +185,7 @@ class VehiclePriceFetcher:
     """
 
     # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v6_carwale_scraper"  # Added CarWale direct scraping (most reliable)
+    CACHE_VERSION = "v7_simple_scraper"  # Added simple string-based scraping (no BS4 dependency)
 
     def __init__(self, cache_duration_hours: int = 24):
         """
@@ -496,7 +505,36 @@ If variant "{variant}" not found, return:
         # Try to fetch live price
         print(f"🔍 Fetching live price for {make} {model} {variant} {fuel}...")
 
-        # Method 0: Try CarWale/CarDekho direct scraping (MOST RELIABLE for variant prices)
+        # Method 0: Try simple string-based scraping (MOST RELIABLE - no dependencies)
+        if SIMPLE_SCRAPER_AVAILABLE and variant:
+            try:
+                print(f"🎯 Method 0: Trying simple price scraper...")
+                scraper_result = get_simple_price(make, model, variant, fuel)
+
+                if scraper_result:
+                    ex_showroom, source_url = scraper_result
+                    on_road = ex_showroom * 1.20  # Calculate on-road (~20% for Hyderabad)
+
+                    print(f"✅ SIMPLE SCRAPER SUCCESS: ₹{ex_showroom:,.0f} from {source_url}")
+
+                    price_data = {
+                        "ex_showroom_price": ex_showroom,
+                        "on_road_price": on_road,
+                        "source": "simple_scraper"
+                    }
+
+                    # Cache the result
+                    self.cache[cache_key] = (price_data, datetime.now())
+                    return price_data
+                else:
+                    print(f"⚠️ Simple scraper returned no match, trying other methods...")
+
+            except Exception as e:
+                print(f"❌ Simple scraper error: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Method 0b: Try CarWale/CarDekho BS4 scraping (requires BeautifulSoup)
         if CARWALE_SCRAPER_AVAILABLE and variant:
             try:
                 print(f"🎯 Method 0: Trying CarWale/CarDekho scraping...")
