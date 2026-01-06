@@ -135,6 +135,14 @@ def extract_price_inline(search_results: list, variant: str) -> Optional[Tuple[f
     return None
 
 
+# Import CarWale scraper (most reliable for variant-specific prices)
+try:
+    from carwale_scraper import get_variant_price
+    CARWALE_SCRAPER_AVAILABLE = True
+except ImportError as e:
+    CARWALE_SCRAPER_AVAILABLE = False
+    print(f"⚠️ CarWale scraper not available: {e}")
+
 # Import direct scraper
 try:
     from direct_price_scraper import get_direct_price
@@ -168,7 +176,7 @@ class VehiclePriceFetcher:
     """
 
     # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v5_inline_regex"  # Inline regex extraction with enhanced diagnostics
+    CACHE_VERSION = "v6_carwale_scraper"  # Added CarWale direct scraping (most reliable)
 
     def __init__(self, cache_duration_hours: int = 24):
         """
@@ -488,7 +496,36 @@ If variant "{variant}" not found, return:
         # Try to fetch live price
         print(f"🔍 Fetching live price for {make} {model} {variant} {fuel}...")
 
-        # Method 1: Try Google Custom Search + Regex extraction (MOST RELIABLE)
+        # Method 0: Try CarWale/CarDekho direct scraping (MOST RELIABLE for variant prices)
+        if CARWALE_SCRAPER_AVAILABLE and variant:
+            try:
+                print(f"🎯 Method 0: Trying CarWale/CarDekho scraping...")
+                scraper_result = get_variant_price(make, model, variant, fuel)
+
+                if scraper_result:
+                    ex_showroom, source_url = scraper_result
+                    on_road = ex_showroom * 1.20  # Calculate on-road (~20% for Hyderabad)
+
+                    print(f"✅ SCRAPER SUCCESS: ₹{ex_showroom:,.0f} from {source_url}")
+
+                    price_data = {
+                        "ex_showroom_price": ex_showroom,
+                        "on_road_price": on_road,
+                        "source": "carwale_scraper"
+                    }
+
+                    # Cache the result
+                    self.cache[cache_key] = (price_data, datetime.now())
+                    return price_data
+                else:
+                    print(f"⚠️ CarWale scraper returned no match, trying other methods...")
+
+            except Exception as e:
+                print(f"❌ CarWale scraper error: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Method 1: Try Google Custom Search + Regex extraction
         search_results = self.search_google(make, model, variant, fuel, year)
 
         if search_results:

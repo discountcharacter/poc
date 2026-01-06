@@ -258,10 +258,12 @@ class OBVHyderabadEngine:
                     print(f"📊 Price data received. Source: {source}")
 
                     # Add diagnostic info about extraction method
-                    if source == "regex_extraction":
-                        self.recommendations.append("🔍 Extraction method: Regex pattern matching (most reliable)")
+                    if source == "carwale_scraper":
+                        self.recommendations.append("🎯 Extraction method: Direct CarWale/CarDekho scraping (MOST RELIABLE for variants)")
+                    elif source == "regex_extraction":
+                        self.recommendations.append("🔍 Extraction method: Regex pattern matching (reliable)")
                     elif source == "gemini_extraction":
-                        self.warnings.append("⚠️ Regex extraction failed - fell back to Gemini (less reliable for variant matching)")
+                        self.warnings.append("⚠️ Scraper and regex extraction failed - fell back to Gemini (less reliable for variant matching)")
                     elif source == "carwale_direct":
                         self.recommendations.append("🔍 Extraction method: Direct CarWale scraping")
 
