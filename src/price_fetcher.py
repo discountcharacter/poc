@@ -184,8 +184,8 @@ class VehiclePriceFetcher:
     Fetches current vehicle prices using Google Search + Gemini extraction
     """
 
-    # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v11_strict_variant_matching"  # Strict regex patterns + cross-variant validation
+    # Cache DISABLED - always fetch fresh prices (cache was causing stale wrong data)
+    CACHE_VERSION = "disabled"  # Cache disabled for data accuracy
 
     def __init__(self, cache_duration_hours: int = 24):
         """
@@ -256,8 +256,8 @@ class VehiclePriceFetcher:
         return f"{self.CACHE_VERSION}_{make.lower()}_{model.lower()}_{variant.lower()}_{fuel.lower()}"
 
     def is_cache_valid(self, timestamp: datetime) -> bool:
-        """Check if cached data is still valid"""
-        return datetime.now() - timestamp < self.cache_duration
+        """Check if cached data is still valid - DISABLED for fresh data"""
+        return False  # Cache disabled - always fetch fresh prices
 
     def search_google(self, make: str, model: str, variant: str, fuel: str, year: int) -> list:
         """
