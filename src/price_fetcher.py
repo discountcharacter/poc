@@ -185,7 +185,7 @@ class VehiclePriceFetcher:
     """
 
     # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v7_simple_scraper"  # Added simple string-based scraping (no BS4 dependency)
+    CACHE_VERSION = "v10_aggregator_priority"  # Prioritized CarDekho/CarWale over official sites
 
     def __init__(self, cache_duration_hours: int = 24):
         """

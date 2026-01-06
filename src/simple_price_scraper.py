@@ -7,45 +7,56 @@ import re
 import requests
 from typing import Optional, Tuple
 
+# Import official website scrapers for all manufacturers
+try:
+    from official_website_scrapers import get_official_price
+    OFFICIAL_SCRAPERS_AVAILABLE = True
+except ImportError:
+    OFFICIAL_SCRAPERS_AVAILABLE = False
+
 
 def normalize_price(price_str: str) -> Optional[float]:
-    """Convert price string like 'Rs.9.15 Lakh' to float"""
+    """Convert price string like 'Rs.9.15 Lakh' or '₹5 78 900' to float"""
     if not price_str:
         return None
 
-    # Remove currency symbols
+    # Remove currency symbols and extra whitespace
     price_str = price_str.replace('₹', '').replace('Rs.', '').replace('Rs', '').strip()
 
-    # Handle Lakh
+    # Handle Lakh format
     if 'lakh' in price_str.lower() or ' l' in price_str.lower():
-        match = re.search(r'([\d,\.]+)', price_str)
+        # Extract all digits, commas, dots, and spaces
+        match = re.search(r'([\d,\.\s]+)', price_str)
         if match:
             try:
-                lakhs = float(match.group(1).replace(',', ''))
+                # Remove all spaces and commas, then convert
+                lakhs = float(match.group(1).replace(',', '').replace(' ', ''))
                 return lakhs * 100000
             except:
                 return None
 
-    # Handle Crore
+    # Handle Crore format
     if 'crore' in price_str.lower() or ' cr' in price_str.lower():
-        match = re.search(r'([\d,\.]+)', price_str)
+        match = re.search(r'([\d,\.\s]+)', price_str)
         if match:
             try:
-                crores = float(match.group(1).replace(',', ''))
+                crores = float(match.group(1).replace(',', '').replace(' ', ''))
                 return crores * 10000000
             except:
                 return None
 
-    # Direct number
+    # Direct number (handles formats like "5 78 900" or "578900")
     try:
-        return float(price_str.replace(',', ''))
+        # Remove all spaces and commas
+        clean_str = price_str.replace(',', '').replace(' ', '')
+        return float(clean_str)
     except:
         return None
 
 
 def scrape_cardekho_simple(make: str, model: str, variant: str) -> Optional[Tuple[float, str]]:
     """
-    Scrape CarDekho using simple string matching
+    Scrape CarDekho using simple string matching (on-road prices - needs conversion)
 
     Returns:
         Tuple of (ex_showroom_price, source_url) or None
@@ -73,23 +84,26 @@ def scrape_cardekho_simple(make: str, model: str, variant: str) -> Optional[Tupl
 
         print(f"   Looking for variant: {target_variant}")
 
-        # Strategy 1: Look for patterns like "Baleno Zeta Rs.9.15 Lakh"
-        # Case-insensitive search
+        # Strategy 1: Look for patterns like "Baleno Zeta Rs.9.15 Lakh" or "Swift Lxi ₹5 78 900"
+        # Case-insensitive search, handles spaces in numbers
         patterns = [
-            # Pattern 1: "Model Variant Rs.X.XX Lakh"
-            rf'{model}\s+{variant}\s*(?:,)?\s*Rs\.?\s*([\d,\.]+\s*Lakh)',
+            # Pattern 0: Official Maruti Suzuki format "Swift Lxi Price in hyderabad. ₹5 78 900.00"
+            rf'{model}\s+{variant}\s+Price\s+in\s+\w+\.\s*(?:Rs\.?|₹)\s*([\d,\.\s]+)',
 
-            # Pattern 2: "Variant Rs.X.XX Lakh"
-            rf'{variant}\s*(?:,)?\s*Rs\.?\s*([\d,\.]+\s*Lakh)',
+            # Pattern 1: "Model Variant Rs.X.XX Lakh" or "Model Variant ₹X XX XXX"
+            rf'{model}\s+{variant}\s*(?:Price[^₹]*)?[,\.\s]*(?:Rs\.?|₹)\s*([\d,\.\s]+(?:\s*Lakh)?)',
+
+            # Pattern 2: "Variant Rs.X.XX Lakh" or "Variant ₹X XX XXX"
+            rf'{variant}\s*(?:Price[^₹]*)?[,\.\s]*(?:Rs\.?|₹)\s*([\d,\.\s]+(?:\s*Lakh)?)',
 
             # Pattern 3: "Variant(Petrol) Rs.X.XX Lakh"
-            rf'{variant}\s*\([^)]*\)\s*Rs\.?\s*([\d,\.]+\s*Lakh)',
+            rf'{variant}\s*\([^)]*\)\s*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*Lakh)',
 
             # Pattern 4: In table row format
-            rf'>{variant}<.*?Rs\.?\s*([\d,\.]+\s*Lakh)',
+            rf'>{variant}<.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*Lakh)',
 
-            # Pattern 5: Variant with price on same line
-            rf'{variant}.*?Rs\.?\s*([\d,\.]+)\s*Lakh',
+            # Pattern 5: Variant with price on same line (loose match)
+            rf'{variant}[^₹<>]*?(?:Rs\.?|₹)\s*([\d,\.\s]+)(?:\s*Lakh|\s*\.00)?',
         ]
 
         found_prices = []
@@ -154,12 +168,12 @@ def scrape_carwale_simple(make: str, model: str, variant: str) -> Optional[Tuple
         target_variant = variant.strip().upper()
         print(f"   Looking for variant: {target_variant}")
 
-        # Similar patterns as CarDekho
+        # Similar patterns as CarDekho, handles space-separated numbers
         patterns = [
-            rf'{model}\s+{variant}\s*(?:Rs\.?|₹)\s*([\d,\.]+\s*(?:Lakh|L))',
-            rf'{variant}\s*(?:Rs\.?|₹)\s*([\d,\.]+\s*(?:Lakh|L))',
-            rf'{variant}\s*\([^)]*\).*?(?:Rs\.?|₹)\s*([\d,\.]+\s*(?:Lakh|L))',
-            rf'>{variant}<.*?(?:Rs\.?|₹)\s*([\d,\.]+\s*(?:Lakh|L))',
+            rf'{model}\s+{variant}\s*(?:Price[^₹]*)?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            rf'{variant}\s*(?:Price[^₹]*)?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            rf'{variant}\s*\([^)]*\).*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L))',
+            rf'>{variant}<.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L))',
         ]
 
         found_prices = []
@@ -196,20 +210,35 @@ def get_simple_price(make: str, model: str, variant: str, fuel: str = "Petrol") 
     """
     Get variant price using simple string matching
 
+    Priority order optimized for coverage and reliability:
+    1. CarDekho/CarWale (most comprehensive, covers ALL manufacturers)
+    2. Official websites (for additional validation when available)
+
     Returns:
         Tuple of (ex_showroom_price, source_url) or None
     """
     print(f"\n🎯 Simple scraper: {make} {model} {variant} ({fuel})")
 
-    # Try CarDekho first (usually more reliable)
+    # Priority 1: CarDekho - Most comprehensive coverage
+    # Covers ALL manufacturers including discontinued (Ford, Chevrolet, Fiat)
     result = scrape_cardekho_simple(make, model, variant)
     if result:
         return result
 
-    # Try CarWale
+    # Priority 2: CarWale - Alternative aggregator
     result = scrape_carwale_simple(make, model, variant)
     if result:
         return result
+
+    # Priority 3: Official manufacturer website (as fallback)
+    # Only for active brands: Maruti, Hyundai, Tata, Honda, Toyota, Kia, Mahindra
+    # May miss discontinued brands or specific variants
+    if OFFICIAL_SCRAPERS_AVAILABLE:
+        print(f"   Aggregators didn't find it, trying official {make} website...")
+        result = get_official_price(make, model, variant)
+        if result:
+            print(f"   ✅ Got price from official {make} website")
+            return result
 
     print("❌ Simple scraper failed on all sources")
     return None
