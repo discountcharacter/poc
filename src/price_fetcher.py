@@ -35,6 +35,13 @@ try:
 except ImportError:
     DIRECT_SCRAPER_AVAILABLE = False
 
+# Import robust regex extractor
+try:
+    from robust_price_extractor import extract_price_for_variant
+    REGEX_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    REGEX_EXTRACTOR_AVAILABLE = False
+
 
 class VehiclePriceFetcher:
     """
@@ -42,7 +49,7 @@ class VehiclePriceFetcher:
     """
 
     # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v2_variant_fix"  # Changed from v1 to invalidate wrong LXi prices
+    CACHE_VERSION = "v3_regex_extraction"  # Changed to use regex-based extraction
 
     def __init__(self, cache_duration_hours: int = 24):
         """
@@ -362,10 +369,38 @@ If variant "{variant}" not found, return:
         # Try to fetch live price
         print(f"🔍 Fetching live price for {make} {model} {variant} {fuel}...")
 
-        # Method 1: Try Google Custom Search + Gemini extraction
+        # Method 1: Try Google Custom Search + Regex extraction (MOST RELIABLE)
         search_results = self.search_google(make, model, variant, fuel, year)
 
+        if search_results and REGEX_EXTRACTOR_AVAILABLE:
+            print(f"🔍 Trying regex-based variant extraction...")
+            try:
+                regex_result = extract_price_for_variant(search_results, make, model, variant, fuel)
+
+                if regex_result:
+                    ex_showroom, source_url = regex_result
+                    on_road = ex_showroom * 1.20  # Calculate on-road
+
+                    print(f"✅ Regex extracted: ₹{ex_showroom:,.0f} from {source_url[:50]}...")
+
+                    price_data = {
+                        "ex_showroom_price": ex_showroom,
+                        "on_road_price": on_road,
+                        "source": "regex_extraction"
+                    }
+
+                    # Cache the result
+                    self.cache[cache_key] = (price_data, datetime.now())
+                    return price_data
+                else:
+                    print("⚠️ Regex extraction returned no match")
+
+            except Exception as e:
+                print(f"⚠️ Regex extraction error: {e}")
+
+        # Method 1b: Fallback to Gemini extraction if regex failed
         if search_results:
+            print(f"🔍 Regex failed, trying Gemini extraction...")
             price_tuple = self.extract_price_with_gemini(make, model, variant, fuel, search_results)
 
             if price_tuple:
@@ -373,7 +408,7 @@ If variant "{variant}" not found, return:
                 price_data = {
                     "ex_showroom_price": ex_showroom,
                     "on_road_price": on_road,
-                    "source": "google_search"
+                    "source": "gemini_extraction"
                 }
 
                 # Cache the result
