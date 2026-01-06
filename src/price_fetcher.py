@@ -41,6 +41,9 @@ class VehiclePriceFetcher:
     Fetches current vehicle prices using Google Search + Gemini extraction
     """
 
+    # Cache version - increment this to invalidate all old caches
+    CACHE_VERSION = "v2_variant_fix"  # Changed from v1 to invalidate wrong LXi prices
+
     def __init__(self, cache_duration_hours: int = 24):
         """
         Initialize price fetcher with caching
@@ -106,8 +109,8 @@ class VehiclePriceFetcher:
         }
 
     def get_cache_key(self, make: str, model: str, variant: str, fuel: str) -> str:
-        """Generate cache key"""
-        return f"{make.lower()}_{model.lower()}_{variant.lower()}_{fuel.lower()}"
+        """Generate cache key with version"""
+        return f"{self.CACHE_VERSION}_{make.lower()}_{model.lower()}_{variant.lower()}_{fuel.lower()}"
 
     def is_cache_valid(self, timestamp: datetime) -> bool:
         """Check if cached data is still valid"""
