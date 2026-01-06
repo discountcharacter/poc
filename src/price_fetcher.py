@@ -35,12 +35,24 @@ try:
 except ImportError:
     DIRECT_SCRAPER_AVAILABLE = False
 
-# Import robust regex extractor
+# Import robust regex extractor with path handling
 try:
+    import sys
+    import os
+    # Ensure src directory is in path
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+
     from robust_price_extractor import extract_price_for_variant
     REGEX_EXTRACTOR_AVAILABLE = True
-except ImportError:
+    print("✅ Robust regex extractor loaded successfully")
+except ImportError as e:
     REGEX_EXTRACTOR_AVAILABLE = False
+    print(f"❌ Regex extractor import failed: {e}")
+except Exception as e:
+    REGEX_EXTRACTOR_AVAILABLE = False
+    print(f"❌ Regex extractor error: {e}")
 
 
 class VehiclePriceFetcher:
@@ -49,7 +61,7 @@ class VehiclePriceFetcher:
     """
 
     # Cache version - increment this to invalidate all old caches
-    CACHE_VERSION = "v3_regex_extraction"  # Changed to use regex-based extraction
+    CACHE_VERSION = "v4_regex_fix"  # Fixed regex import and added diagnostics
 
     def __init__(self, cache_duration_hours: int = 24):
         """
@@ -372,31 +384,39 @@ If variant "{variant}" not found, return:
         # Method 1: Try Google Custom Search + Regex extraction (MOST RELIABLE)
         search_results = self.search_google(make, model, variant, fuel, year)
 
-        if search_results and REGEX_EXTRACTOR_AVAILABLE:
-            print(f"🔍 Trying regex-based variant extraction...")
-            try:
-                regex_result = extract_price_for_variant(search_results, make, model, variant, fuel)
+        if search_results:
+            if not REGEX_EXTRACTOR_AVAILABLE:
+                print("⚠️ Regex extractor NOT available - will use Gemini fallback")
+            else:
+                print(f"🔍 Trying regex-based variant extraction for '{variant}'...")
+                print(f"   Search results count: {len(search_results)}")
+                try:
+                    regex_result = extract_price_for_variant(search_results, make, model, variant, fuel)
 
-                if regex_result:
-                    ex_showroom, source_url = regex_result
-                    on_road = ex_showroom * 1.20  # Calculate on-road
+                    if regex_result:
+                        ex_showroom, source_url = regex_result
+                        on_road = ex_showroom * 1.20  # Calculate on-road
 
-                    print(f"✅ Regex extracted: ₹{ex_showroom:,.0f} from {source_url[:50]}...")
+                        print(f"✅ Regex SUCCESS: ₹{ex_showroom:,.0f} for variant '{variant}'")
+                        print(f"   Source: {source_url[:80]}...")
 
-                    price_data = {
-                        "ex_showroom_price": ex_showroom,
-                        "on_road_price": on_road,
-                        "source": "regex_extraction"
-                    }
+                        price_data = {
+                            "ex_showroom_price": ex_showroom,
+                            "on_road_price": on_road,
+                            "source": "regex_extraction"
+                        }
 
-                    # Cache the result
-                    self.cache[cache_key] = (price_data, datetime.now())
-                    return price_data
-                else:
-                    print("⚠️ Regex extraction returned no match")
+                        # Cache the result
+                        self.cache[cache_key] = (price_data, datetime.now())
+                        return price_data
+                    else:
+                        print(f"⚠️ Regex extraction returned NO MATCH for variant '{variant}'")
+                        print("   Will fallback to Gemini extraction...")
 
-            except Exception as e:
-                print(f"⚠️ Regex extraction error: {e}")
+                except Exception as e:
+                    print(f"❌ Regex extraction ERROR: {e}")
+                    import traceback
+                    traceback.print_exc()
 
         # Method 1b: Fallback to Gemini extraction if regex failed
         if search_results:
