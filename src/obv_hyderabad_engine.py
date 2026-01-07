@@ -218,9 +218,9 @@ class OBVHyderabadEngine:
     def get_current_new_price(self, make: str, model: str, variant: str, year: int,
                              fuel_type: FuelType = None, month: int = 3, transmission: str = "Manual") -> float:
         """
-        Fetch current new vehicle price using Gemini API with Google Search
+        Fetch current new vehicle price using HYBRID approach
 
-        ONLY uses Gemini API - no fallbacks, no estimates.
+        Uses Google Custom Search API + Direct HTML Scraping for accuracy.
 
         Args:
             make: Vehicle manufacturer
@@ -237,21 +237,20 @@ class OBVHyderabadEngine:
         Raises:
             ValueError: If API key not found or price fetch fails
         """
-        # Gemini API requires fuel type
+        # Hybrid fetcher requires fuel type
         if not fuel_type:
-            raise ValueError("Fuel type is required for Gemini API price search")
+            raise ValueError("Fuel type is required for price search")
 
         fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
 
-        # ONLY use Gemini API - no fallbacks
+        # ONLY use Hybrid fetcher - no fallbacks
         if not PRICE_FETCHER_AVAILABLE:
             raise ImportError(
-                "Gemini price fetcher not available. "
-                "Install google-genai: pip install google-genai"
+                "Hybrid price fetcher not available."
             )
 
         try:
-            print(f"🔍 Fetching price via Gemini API: {make} {model} {variant} {fuel_str}...")
+            print(f"🔍 Fetching price via Hybrid Search: {make} {model} {variant} {fuel_str}...")
             price_data = price_fetcher.get_current_price(
                 make=make,
                 model=model,
@@ -264,13 +263,17 @@ class OBVHyderabadEngine:
 
             source = price_data.get("source")
             ex_showroom = price_data.get("ex_showroom_price")
+            source_url = price_data.get("source_url", "N/A")
 
             print(f"📊 Price received: ₹{ex_showroom:,.0f} from {source}")
 
             # Update diagnostic message
-            if source == "gemini_grounded_search":
+            if source == "hybrid_search_scrape":
                 self.recommendations.append(
-                    "✅ Price source: Gemini AI with Google Search grounding"
+                    f"✅ Price source: Google Search + HTML Scraping (MOST ACCURATE)"
+                )
+                self.recommendations.append(
+                    f"   Source URL: {source_url[:80]}..."
                 )
 
             # Validate price range
