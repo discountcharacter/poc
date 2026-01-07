@@ -27,12 +27,13 @@ import sys
 import os
 
 # Import MULTI-SOURCE PRICE VALIDATOR (MAXIMUM ACCURACY)
-try:
-    # Add src directory to path if not already there
-    src_dir = os.path.dirname(os.path.abspath(__file__))
-    if src_dir not in sys.path:
-        sys.path.insert(0, src_dir)
+# Add src directory to path if not already there
+src_dir = os.path.dirname(os.path.abspath(__file__))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
+# Try to import multi-source validator
+try:
     from multi_source_price_validator import get_accurate_price, ConfidenceLevel
     MULTI_SOURCE_VALIDATOR_AVAILABLE = True
     print("✅ Using MULTI-SOURCE PRICE VALIDATOR")
@@ -40,18 +41,22 @@ try:
     print("   Features: Cross-validation, Confidence scoring, Maximum accuracy")
 except ImportError as e:
     print(f"⚠️ Multi-source validator import failed: {e}")
-    print(f"   Falling back to simple scraper...")
-    try:
-        from simple_price_scraper import get_simple_price
-        MULTI_SOURCE_VALIDATOR_AVAILABLE = False
-        SIMPLE_SCRAPER_AVAILABLE = True
-        print("✅ Using simple web scraper (CarDekho/CarWale direct scraping)")
-    except ImportError:
-        MULTI_SOURCE_VALIDATOR_AVAILABLE = False
-        SIMPLE_SCRAPER_AVAILABLE = False
+    MULTI_SOURCE_VALIDATOR_AVAILABLE = False
 except Exception as e:
     print(f"⚠️ Multi-source validator error: {e}")
     MULTI_SOURCE_VALIDATOR_AVAILABLE = False
+
+# Always try to import simple scraper as fallback
+try:
+    from simple_price_scraper import get_simple_price
+    SIMPLE_SCRAPER_AVAILABLE = True
+    if not MULTI_SOURCE_VALIDATOR_AVAILABLE:
+        print("✅ Using simple web scraper (CarDekho/CarWale direct scraping)")
+except ImportError as e:
+    print(f"⚠️ Simple scraper import failed: {e}")
+    SIMPLE_SCRAPER_AVAILABLE = False
+except Exception as e:
+    print(f"⚠️ Simple scraper error: {e}")
     SIMPLE_SCRAPER_AVAILABLE = False
 
 
