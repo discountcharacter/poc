@@ -8,6 +8,7 @@ dependencies:
   - pip:
     - streamlit
     - google-generativeai
+    - google-genai
     - requests
     - pandas
     - python-dotenv
@@ -18,3 +19,4 @@ dependencies:
     - lightgbm
     - playwright
     - numpy
+    - plotly
