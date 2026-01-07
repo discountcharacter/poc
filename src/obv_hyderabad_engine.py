@@ -218,94 +218,86 @@ class OBVHyderabadEngine:
     def get_current_new_price(self, make: str, model: str, variant: str, year: int,
                              fuel_type: FuelType = None, month: int = 3, transmission: str = "Manual") -> float:
         """
-        Fetch current new vehicle price using live search or fallback
+        Fetch current new vehicle price using Gemini API with Google Search
 
-        Uses Google Search + Gemini to find current ex-showroom prices in Hyderabad.
-        Falls back to estimation if live search fails.
+        ONLY uses Gemini API - no fallbacks, no estimates.
 
         Args:
             make: Vehicle manufacturer
             model: Model name
             variant: Specific trim/variant
             year: Manufacturing year
-            fuel_type: Fuel type (for live search)
+            fuel_type: Fuel type (required)
+            month: Manufacturing month
+            transmission: Transmission type
 
         Returns:
             Current ex-showroom price in INR
+
+        Raises:
+            ValueError: If API key not found or price fetch fails
         """
-        # Try live price fetcher first
+        # Gemini API requires fuel type
+        if not fuel_type:
+            raise ValueError("Fuel type is required for Gemini API price search")
+
+        fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
+
+        # ONLY use Gemini API - no fallbacks
         if not PRICE_FETCHER_AVAILABLE:
-            self.warnings.append(
-                "⚠️ Live price fetcher not available. Check if price_fetcher.py is accessible "
-                "and all dependencies (google-generativeai, requests) are installed."
+            raise ImportError(
+                "Gemini price fetcher not available. "
+                "Install google-genai: pip install google-genai"
             )
-        elif not fuel_type:
-            self.warnings.append(
-                "⚠️ Fuel type not provided. Live price search requires fuel type."
-            )
-        else:
-            fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
 
-            try:
-                print(f"🔍 Attempting Gemini price search for {make} {model} {variant} {fuel_str}...")
-                price_data = price_fetcher.get_current_price(
-                    make=make,
-                    model=model,
-                    variant=variant,
-                    fuel=fuel_str,
-                    year=year,
-                    month=month,
-                    transmission=transmission
+        try:
+            print(f"🔍 Fetching price via Gemini API: {make} {model} {variant} {fuel_str}...")
+            price_data = price_fetcher.get_current_price(
+                make=make,
+                model=model,
+                variant=variant,
+                fuel=fuel_str,
+                year=year,
+                month=month,
+                transmission=transmission
+            )
+
+            source = price_data.get("source")
+            ex_showroom = price_data.get("ex_showroom_price")
+
+            print(f"📊 Price received: ₹{ex_showroom:,.0f} from {source}")
+
+            # Update diagnostic message
+            if source == "gemini_grounded_search":
+                self.recommendations.append(
+                    "✅ Price source: Gemini AI with Google Search grounding"
                 )
 
-                if price_data:
-                    source = price_data.get("source")
-                    print(f"📊 Price data received. Source: {source}")
-
-                    # Add diagnostic info about extraction method
-                    if source == "gemini_grounded_search":
-                        self.recommendations.append("✅ Extraction method: Gemini AI with Google Search grounding (MOST RELIABLE)")
-                    elif source == "simple_scraper":
-                        self.recommendations.append("✅ Extraction method: Simple string-based scraping (RELIABLE)")
-                    elif source == "carwale_scraper":
-                        self.recommendations.append("🎯 Extraction method: Direct CarWale/CarDekho scraping (RELIABLE)")
-                    elif source == "regex_extraction":
-                        self.recommendations.append("🔍 Extraction method: Regex pattern matching (reliable)")
-                    elif source == "gemini_extraction":
-                        self.warnings.append("⚠️ Legacy Gemini extraction (less reliable)")
-                    elif source == "carwale_direct":
-                        self.recommendations.append("🔍 Extraction method: Direct CarWale scraping")
-
-                    if source != "fallback_estimate":
-                        # Use ex-showroom price from live search
-                        ex_showroom = price_data.get("ex_showroom_price")
-                        if ex_showroom and 300000 <= ex_showroom <= 15000000:
-                            self.recommendations.append(
-                                f"✅ Using live price data from {source}: ₹{ex_showroom:,.0f}"
-                            )
-                            return ex_showroom
-                        else:
-                            print(f"⚠️ Price validation failed: ₹{ex_showroom}")
-                            self.warnings.append(
-                                f"⚠️ Live price found (₹{ex_showroom:,.0f}) but outside valid range. Using fallback."
-                            )
-                    else:
-                        print(f"ℹ️ Price fetcher returned fallback estimate")
-                        self.warnings.append(
-                            "ℹ️ Live price search returned no results. Using fallback estimate."
-                        )
-                else:
-                    print("⚠️ No price data returned from fetcher")
-
-            except Exception as e:
-                error_msg = str(e)
-                print(f"❌ Price fetcher error: {error_msg}")
-                self.warnings.append(
-                    f"⚠️ Live price search failed: {error_msg[:100]}. Using fallback."
+            # Validate price range
+            if ex_showroom and 300000 <= ex_showroom <= 15000000:
+                self.recommendations.append(
+                    f"✅ Current ex-showroom price: ₹{ex_showroom:,.0f}"
+                )
+                return ex_showroom
+            else:
+                raise ValueError(
+                    f"Price ₹{ex_showroom:,.0f} outside valid range (3L-1.5Cr)"
                 )
 
+        except Exception as e:
+            error_msg = str(e)
+            print(f"❌ Price fetch failed: {error_msg}")
+            # Re-raise - NO FALLBACKS ALLOWED!
+            raise
+
+    def get_current_new_price_DISABLED_FALLBACK(self, make: str, model: str, variant: str, year: int,
+                             fuel_type: FuelType = None, month: int = 3, transmission: str = "Manual") -> float:
+        """
+        DISABLED: Old fallback estimation method
+        Kept for reference only - should never be called
+        """
         # Fallback to segment-based estimation
-        segments = {
+        segments_disabled = {
             'alto': 450000,
             'kwid': 450000,
             'wagon r': 550000,
@@ -373,12 +365,8 @@ class OBVHyderabadEngine:
             inflation_factor = 1.06 ** years_diff
             base_price = base_price * inflation_factor
 
-        self.warnings.append(
-            f"⚠️ Using estimated base price (₹{base_price:,.0f}). "
-            "Live price search unavailable or failed."
-        )
-
-        return base_price
+        # This method should never be called
+        raise NotImplementedError("Fallback estimation disabled - use Gemini API only")
 
     def calculate_segmented_depreciation(self, age_years: float, base_price: float) -> Tuple[float, Dict[str, float]]:
         """
