@@ -115,7 +115,9 @@ def get_car_price_gemini(make: str, model: str, variant: str, year: int,
         )
 
         print(f"🔍 Gemini API: Searching for {make} {model} {variant}...")
+        print(f"   Prompt: {prompt_text[:100]}...")
 
+        # IMPORTANT: Use the model name specified by user
         model_name = "gemini-2.0-flash-exp"
 
         contents = [
@@ -141,15 +143,31 @@ def get_car_price_gemini(make: str, model: str, variant: str, year: int,
         response_text = ""
 
         # Stream response
-        for chunk in client.models.generate_content_stream(
-            model=model_name,
-            contents=contents,
-            config=generate_content_config,
-        ):
-            if hasattr(chunk, 'text') and chunk.text:
-                response_text += chunk.text
+        try:
+            for chunk in client.models.generate_content_stream(
+                model=model_name,
+                contents=contents,
+                config=generate_content_config,
+            ):
+                if hasattr(chunk, 'text') and chunk.text:
+                    response_text += chunk.text
+                    print(f"   Chunk received: {chunk.text[:50]}...")
+        except Exception as stream_error:
+            print(f"   ⚠️ Streaming error: {stream_error}")
+            # Try non-streaming as fallback
+            print(f"   Trying non-streaming...")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=generate_content_config,
+            )
+            response_text = response.text if hasattr(response, 'text') else str(response)
 
-        print(f"   📊 Response: {response_text[:200]}")
+        print(f"   📊 Full response: {response_text[:300]}")
+
+        if not response_text or response_text.strip() == "":
+            print(f"   ⚠️ Empty response from Gemini API")
+            return None
 
         # Parse JSON response
         try:
