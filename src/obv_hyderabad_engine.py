@@ -26,20 +26,22 @@ from enum import Enum
 import sys
 import os
 
-# Import price fetcher with robust path handling
+# Import NEW Gemini-based price fetcher with robust path handling
 try:
     # Add src directory to path if not already there
     src_dir = os.path.dirname(os.path.abspath(__file__))
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
 
-    from price_fetcher import price_fetcher
+    from price_fetcher_gemini import price_fetcher
     PRICE_FETCHER_AVAILABLE = True
+    print("✅ Using NEW Gemini-based price fetcher with Google Search grounding")
 except ImportError as e:
-    print(f"Price fetcher import failed: {e}")
+    print(f"⚠️ Gemini price fetcher import failed: {e}")
+    print("   Falling back to estimate-based pricing")
     PRICE_FETCHER_AVAILABLE = False
 except Exception as e:
-    print(f"Price fetcher error: {e}")
+    print(f"⚠️ Price fetcher error: {e}")
     PRICE_FETCHER_AVAILABLE = False
 
 
@@ -213,7 +215,8 @@ class OBVHyderabadEngine:
         age_years = age_days / 365.25
         return age_years
 
-    def get_current_new_price(self, make: str, model: str, variant: str, year: int, fuel_type: FuelType = None) -> float:
+    def get_current_new_price(self, make: str, model: str, variant: str, year: int,
+                             fuel_type: FuelType = None, month: int = 3, transmission: str = "Manual") -> float:
         """
         Fetch current new vehicle price using live search or fallback
 
@@ -244,13 +247,15 @@ class OBVHyderabadEngine:
             fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
 
             try:
-                print(f"🔍 Attempting live price search for {make} {model} {variant} {fuel_str}...")
+                print(f"🔍 Attempting Gemini price search for {make} {model} {variant} {fuel_str}...")
                 price_data = price_fetcher.get_current_price(
                     make=make,
                     model=model,
                     variant=variant,
                     fuel=fuel_str,
-                    year=year
+                    year=year,
+                    month=month,
+                    transmission=transmission
                 )
 
                 if price_data:
@@ -258,14 +263,16 @@ class OBVHyderabadEngine:
                     print(f"📊 Price data received. Source: {source}")
 
                     # Add diagnostic info about extraction method
-                    if source == "simple_scraper":
-                        self.recommendations.append("✅ Extraction method: Simple string-based scraping (MOST RELIABLE)")
+                    if source == "gemini_grounded_search":
+                        self.recommendations.append("✅ Extraction method: Gemini AI with Google Search grounding (MOST RELIABLE)")
+                    elif source == "simple_scraper":
+                        self.recommendations.append("✅ Extraction method: Simple string-based scraping (RELIABLE)")
                     elif source == "carwale_scraper":
                         self.recommendations.append("🎯 Extraction method: Direct CarWale/CarDekho scraping (RELIABLE)")
                     elif source == "regex_extraction":
                         self.recommendations.append("🔍 Extraction method: Regex pattern matching (reliable)")
                     elif source == "gemini_extraction":
-                        self.warnings.append("⚠️ All scrapers and regex extraction failed - fell back to Gemini (less reliable for variant matching)")
+                        self.warnings.append("⚠️ Legacy Gemini extraction (less reliable)")
                     elif source == "carwale_direct":
                         self.recommendations.append("🔍 Extraction method: Direct CarWale scraping")
 
@@ -840,9 +847,13 @@ class OBVHyderabadEngine:
         # 1. Calculate vehicle age
         age_years = self.calculate_vehicle_age(vehicle.registration_date)
 
-        # 2. Get current new vehicle price (with live search)
+        # 2. Get current new vehicle price (with Gemini + Google Search)
+        # Extract month from registration date if available
+        month = vehicle.registration_date.month if hasattr(vehicle, 'registration_date') else 3
+
         base_price = self.get_current_new_price(
-            vehicle.make, vehicle.model, vehicle.variant, vehicle.year, vehicle.fuel_type
+            vehicle.make, vehicle.model, vehicle.variant, vehicle.year,
+            vehicle.fuel_type, month, vehicle.transmission
         )
 
         # 3. Calculate segmented depreciation
