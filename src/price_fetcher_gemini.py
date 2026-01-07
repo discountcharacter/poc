@@ -91,13 +91,15 @@ def get_car_price_gemini(make: str, model: str, variant: str, year: int,
         Dictionary with 'ex_showroom_price' and 'source' or None if failed
     """
     if not GENAI_AVAILABLE:
-        print("❌ google-genai package not available")
-        return None
+        raise ImportError("google-genai package not installed. Install with: pip install google-genai")
 
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        print("❌ GEMINI_API_KEY or GOOGLE_API_KEY not found in environment")
-        return None
+        raise ValueError(
+            "❌ GEMINI_API_KEY or GOOGLE_API_KEY not found in environment variables.\n"
+            "   Set your API key in .env file:\n"
+            "   GEMINI_API_KEY=your_key_here"
+        )
 
     try:
         client = genai.Client(api_key=api_key)
@@ -201,18 +203,19 @@ class PriceFetcherGemini:
     """
     Price fetcher using Gemini API with Google Search grounding
 
-    Replaces web scraping with AI-powered search and extraction
+    ONLY uses Gemini API - no fallbacks, no web scraping
     """
 
     def __init__(self):
         """Initialize Gemini-based price fetcher"""
-        self.cache = {}  # Simple in-memory cache
+        # No cache - always fetch fresh prices
+        pass
 
     def get_current_price(self, make: str, model: str, variant: str = "",
                          fuel: str = "Petrol", year: int = None,
                          month: int = 3, transmission: str = "Manual") -> Dict:
         """
-        Get current vehicle price using Gemini API
+        Get current vehicle price using Gemini API - NO FALLBACKS
 
         Args:
             make: Vehicle manufacturer
@@ -225,15 +228,19 @@ class PriceFetcherGemini:
 
         Returns:
             Dictionary with ex_showroom_price and source
+
+        Raises:
+            ValueError: If API key not found
+            ImportError: If google-genai not installed
         """
         from datetime import datetime
 
         if year is None:
             year = datetime.now().year
 
-        # Try Gemini API with Google Search grounding
-        print(f"🔍 Fetching live price for {make} {model} {variant} {fuel}...")
+        print(f"🔍 Fetching live price using Gemini API for {make} {model} {variant} {fuel}...")
 
+        # Use ONLY Gemini API - no fallbacks
         result = get_car_price_gemini(
             make=make,
             model=model,
@@ -248,12 +255,12 @@ class PriceFetcherGemini:
         if result:
             return result
 
-        # Fallback: return None to trigger estimate in OBV engine
-        print("   ❌ Gemini search returned no valid price")
-        return {
-            'ex_showroom_price': None,
-            'source': 'fallback_estimate'
-        }
+        # If Gemini returns None, return None (OBV engine will handle error)
+        print("   ❌ Gemini API returned no valid price")
+        raise ValueError(
+            f"Failed to fetch price for {make} {model} {variant}. "
+            "Gemini API did not return a valid price."
+        )
 
 
 # Create singleton instance
