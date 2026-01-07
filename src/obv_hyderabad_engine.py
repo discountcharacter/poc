@@ -26,38 +26,21 @@ from enum import Enum
 import sys
 import os
 
-# Import MULTI-SOURCE PRICE VALIDATOR (MAXIMUM ACCURACY)
-# Add src directory to path if not already there
-src_dir = os.path.dirname(os.path.abspath(__file__))
-if src_dir not in sys.path:
-    sys.path.insert(0, src_dir)
-
-# Try to import multi-source validator
+# Import price fetcher with robust path handling
 try:
-    from multi_source_price_validator import get_accurate_price, ConfidenceLevel
-    MULTI_SOURCE_VALIDATOR_AVAILABLE = True
-    print("✅ Using MULTI-SOURCE PRICE VALIDATOR")
-    print("   Sources: Official Websites + CarDekho + CarWale + ZigWheels + V3Cars + AutocarIndia + Smartprix")
-    print("   Features: Cross-validation, Confidence scoring, Maximum accuracy")
-except ImportError as e:
-    print(f"⚠️ Multi-source validator import failed: {e}")
-    MULTI_SOURCE_VALIDATOR_AVAILABLE = False
-except Exception as e:
-    print(f"⚠️ Multi-source validator error: {e}")
-    MULTI_SOURCE_VALIDATOR_AVAILABLE = False
+    # Add src directory to path if not already there
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
 
-# Always try to import simple scraper as fallback
-try:
-    from simple_price_scraper import get_simple_price
-    SIMPLE_SCRAPER_AVAILABLE = True
-    if not MULTI_SOURCE_VALIDATOR_AVAILABLE:
-        print("✅ Using simple web scraper (CarDekho/CarWale direct scraping)")
+    from price_fetcher import price_fetcher
+    PRICE_FETCHER_AVAILABLE = True
 except ImportError as e:
-    print(f"⚠️ Simple scraper import failed: {e}")
-    SIMPLE_SCRAPER_AVAILABLE = False
+    print(f"Price fetcher import failed: {e}")
+    PRICE_FETCHER_AVAILABLE = False
 except Exception as e:
-    print(f"⚠️ Simple scraper error: {e}")
-    SIMPLE_SCRAPER_AVAILABLE = False
+    print(f"Price fetcher error: {e}")
+    PRICE_FETCHER_AVAILABLE = False
 
 
 class FuelType(Enum):
@@ -230,92 +213,91 @@ class OBVHyderabadEngine:
         age_years = age_days / 365.25
         return age_years
 
-    def get_current_new_price(self, make: str, model: str, variant: str, year: int,
-                             fuel_type: FuelType = None, month: int = 3, transmission: str = "Manual") -> float:
+    def get_current_new_price(self, make: str, model: str, variant: str, year: int, fuel_type: FuelType = None) -> float:
         """
-        Fetch current new vehicle price using MULTI-SOURCE VALIDATION
+        Fetch current new vehicle price using live search or fallback
 
-        Priority (for MAXIMUM ACCURACY):
-        1. Multi-source validator (Official websites + 6 aggregators with cross-validation)
-        2. Simple web scraping (CarDekho/CarWale)
-        3. Fallback to segment-based estimation
+        Uses Google Search + Gemini to find current ex-showroom prices in Hyderabad.
+        Falls back to estimation if live search fails.
 
         Args:
             make: Vehicle manufacturer
             model: Model name
             variant: Specific trim/variant
             year: Manufacturing year
-            fuel_type: Fuel type
-            month: Manufacturing month
-            transmission: Transmission type
+            fuel_type: Fuel type (for live search)
 
         Returns:
             Current ex-showroom price in INR
         """
-        # PRIORITY 1: Multi-Source Validator (BEST ACCURACY)
-        if MULTI_SOURCE_VALIDATOR_AVAILABLE and variant and fuel_type:
+        # Try live price fetcher first
+        if not PRICE_FETCHER_AVAILABLE:
+            self.warnings.append(
+                "⚠️ Live price fetcher not available. Check if price_fetcher.py is accessible "
+                "and all dependencies (google-generativeai, requests) are installed."
+            )
+        elif not fuel_type:
+            self.warnings.append(
+                "⚠️ Fuel type not provided. Live price search requires fuel type."
+            )
+        else:
             fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
 
             try:
-                price, confidence, warnings = get_accurate_price(make, model, variant, fuel_str, city="hyderabad")
+                print(f"🔍 Attempting live price search for {make} {model} {variant} {fuel_str}...")
+                price_data = price_fetcher.get_current_price(
+                    make=make,
+                    model=model,
+                    variant=variant,
+                    fuel=fuel_str,
+                    year=year
+                )
 
-                if price and 300000 <= price <= 15000000:
-                    # Add confidence and source information
-                    self.recommendations.append(
-                        f"✅ Price source: Multi-Source Validation ({confidence})"
-                    )
-                    self.recommendations.append(
-                        f"✅ Current ex-showroom price: ₹{price:,.0f}"
-                    )
+                if price_data:
+                    source = price_data.get("source")
+                    print(f"📊 Price data received. Source: {source}")
 
-                    # Add any warnings from the validator
-                    for warning in warnings:
-                        if "MANUAL VERIFICATION REQUIRED" in warning or "HIGH DISAGREEMENT" in warning:
-                            self.warnings.append(warning)
+                    # Add diagnostic info about extraction method
+                    if source == "simple_scraper":
+                        self.recommendations.append("✅ Extraction method: Simple string-based scraping (MOST RELIABLE)")
+                    elif source == "carwale_scraper":
+                        self.recommendations.append("🎯 Extraction method: Direct CarWale/CarDekho scraping (RELIABLE)")
+                    elif source == "regex_extraction":
+                        self.recommendations.append("🔍 Extraction method: Regex pattern matching (reliable)")
+                    elif source == "gemini_extraction":
+                        self.warnings.append("⚠️ All scrapers and regex extraction failed - fell back to Gemini (less reliable for variant matching)")
+                    elif source == "carwale_direct":
+                        self.recommendations.append("🔍 Extraction method: Direct CarWale scraping")
+
+                    if source != "fallback_estimate":
+                        # Use ex-showroom price from live search
+                        ex_showroom = price_data.get("ex_showroom_price")
+                        if ex_showroom and 300000 <= ex_showroom <= 15000000:
+                            self.recommendations.append(
+                                f"✅ Using live price data from {source}: ₹{ex_showroom:,.0f}"
+                            )
+                            return ex_showroom
                         else:
-                            self.recommendations.append(warning)
-
-                    print(f"   ✅ Multi-source validated price: ₹{price:,.0f} ({confidence})")
-                    return price
-                else:
-                    print(f"   ⚠️ Multi-source validator returned invalid price or failed")
-
-            except Exception as e:
-                print(f"   ⚠️ Multi-source validator error: {e}")
-
-        # PRIORITY 2: Simple Web Scraping Fallback
-        if SIMPLE_SCRAPER_AVAILABLE and variant and fuel_type:
-            fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
-
-            try:
-                print(f"🔍 Fallback: Using simple web scraping...")
-                scraper_result = get_simple_price(make, model, variant, fuel_str)
-
-                if scraper_result:
-                    ex_showroom, source_url = scraper_result
-
-                    if ex_showroom and 300000 <= ex_showroom <= 15000000:
-                        self.recommendations.append(
-                            "✅ Price source: Direct web scraping (CarDekho/CarWale)"
-                        )
-                        self.recommendations.append(
-                            f"✅ Current ex-showroom price: ₹{ex_showroom:,.0f}"
-                        )
-                        self.warnings.append(
-                            "⚠️ Using single-source price (simple scraper). Multi-source validator unavailable."
-                        )
-                        print(f"   ✅ Found price: ₹{ex_showroom:,.0f}")
-                        return ex_showroom
+                            print(f"⚠️ Price validation failed: ₹{ex_showroom}")
+                            self.warnings.append(
+                                f"⚠️ Live price found (₹{ex_showroom:,.0f}) but outside valid range. Using fallback."
+                            )
                     else:
-                        print(f"   ⚠️ Price {ex_showroom} outside valid range")
+                        print(f"ℹ️ Price fetcher returned fallback estimate")
+                        self.warnings.append(
+                            "ℹ️ Live price search returned no results. Using fallback estimate."
+                        )
                 else:
-                    print("   ⚠️ Web scraping returned no price")
+                    print("⚠️ No price data returned from fetcher")
 
             except Exception as e:
-                print(f"   ⚠️ Web scraping error: {e}")
+                error_msg = str(e)
+                print(f"❌ Price fetcher error: {error_msg}")
+                self.warnings.append(
+                    f"⚠️ Live price search failed: {error_msg[:100]}. Using fallback."
+                )
 
-        # PRIORITY 3: Segment-based estimation (LAST RESORT)
-        print("   Using fallback estimation...")
+        # Fallback to segment-based estimation
         segments = {
             'alto': 450000,
             'kwid': 450000,
@@ -385,8 +367,8 @@ class OBVHyderabadEngine:
             base_price = base_price * inflation_factor
 
         self.warnings.append(
-            f"ℹ️ Using estimated base price (₹{base_price:,.0f}). "
-            "Web scraping did not find variant-specific price."
+            f"⚠️ Using estimated base price (₹{base_price:,.0f}). "
+            "Live price search unavailable or failed."
         )
 
         return base_price
@@ -858,13 +840,9 @@ class OBVHyderabadEngine:
         # 1. Calculate vehicle age
         age_years = self.calculate_vehicle_age(vehicle.registration_date)
 
-        # 2. Get current new vehicle price (with Gemini + Google Search)
-        # Extract month from registration date if available
-        month = vehicle.registration_date.month if hasattr(vehicle, 'registration_date') else 3
-
+        # 2. Get current new vehicle price (with live search)
         base_price = self.get_current_new_price(
-            vehicle.make, vehicle.model, vehicle.variant, vehicle.year,
-            vehicle.fuel_type, month, vehicle.transmission
+            vehicle.make, vehicle.model, vehicle.variant, vehicle.year, vehicle.fuel_type
         )
 
         # 3. Calculate segmented depreciation
