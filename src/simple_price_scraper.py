@@ -79,29 +79,33 @@ def scrape_cardekho_simple(make: str, model: str, variant: str) -> Optional[Tupl
 
         html = response.text
 
-        # Normalize variant for matching
+        # Normalize variant for matching (preserve original case for display)
         target_variant = variant.strip().upper()
 
-        print(f"   Looking for variant: {target_variant}")
+        # Create flexible variant pattern that matches both "VXI" and "VXi" style
+        # This handles Maruti's mixed-case naming (LXi, VXi, ZXi, etc.)
+        variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
 
-        # Strategy 1: Look for patterns like "Baleno Zeta Rs.9.15 Lakh" or "Swift Lxi ₹5 78 900"
-        # STRICT matching - variant and price must be on same line, very close together
+        print(f"   Looking for variant: {target_variant} (pattern: {variant_pattern})")
+
+        # Strategy 1: Look for patterns like "Baleno Zeta Rs.9.15 Lakh" or "Swift VXi ₹5 78 900"
+        # FLEXIBLE matching - handles both "VXI" and "VXi" style variants
         patterns = [
             # Pattern 1: STRICT - Variant directly followed by price (max 20 chars between)
-            # Matches: "VXI Rs.6.59 Lakh" or "VXI, Rs.6.59 Lakh" or "VXI: Rs.6.59 Lakh"
-            rf'\b{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            # Matches: "VXI Rs.6.59 Lakh" or "VXi, Rs.6.59 Lakh" or "VXi: Rs.6.59 Lakh"
+            rf'\b{variant_pattern}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
 
             # Pattern 2: Model + Variant + Price on same line (max 30 chars)
-            # Matches: "Swift VXI Rs.6.59 Lakh"
-            rf'\b{model}\s+{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            # Matches: "Swift VXi Rs.6.59 Lakh"
+            rf'\b{model}\s+{variant_pattern}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
 
             # Pattern 3: Variant in parentheses with fuel type
-            # Matches: "VXI(Petrol) Rs.6.59 Lakh"
-            rf'\b{variant}\s*\([^)]+\)[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            # Matches: "VXi(Petrol) Rs.6.59 Lakh"
+            rf'\b{variant_pattern}\s*\([^)]+\)[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
 
             # Pattern 4: Table cell format (variant in one tag, price nearby)
-            # Matches: "<td>VXI</td><td>Rs.6.59 Lakh</td>"
-            rf'>{variant}\s*<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            # Matches: "<td>VXi</td><td>Rs.6.59 Lakh</td>"
+            rf'>{variant_pattern}\s*<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
         ]
 
         found_prices = []
@@ -183,15 +187,20 @@ def scrape_carwale_simple(make: str, model: str, variant: str) -> Optional[Tuple
 
         html = response.text
 
+        # Normalize variant for matching
         target_variant = variant.strip().upper()
-        print(f"   Looking for variant: {target_variant}")
 
-        # Generic variant patterns
+        # Create flexible variant pattern (handles "VXI" and "VXi" style)
+        variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
+
+        print(f"   Looking for variant: {target_variant} (pattern: {variant_pattern})")
+
+        # Generic variant patterns with flexible case matching
         patterns = [
-            rf'\b{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
-            rf'\b{model}\s+{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
-            rf'\b{variant}\s*\([^)]+\)[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
-            rf'>{variant}\s*<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            rf'\b{variant_pattern}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            rf'\b{model}\s+{variant_pattern}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            rf'\b{variant_pattern}\s*\([^)]+\)[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
+            rf'>{variant_pattern}\s*<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
         ]
 
         found_prices = []

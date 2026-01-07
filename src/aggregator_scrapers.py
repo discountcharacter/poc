@@ -70,11 +70,14 @@ def scrape_zigwheels(make: str, model: str, variant: str) -> Optional[Tuple[floa
         html = response.text
         target_variant = variant.strip().upper()
 
-        # ZigWheels patterns
+        # Create flexible variant pattern (handles "VXI" and "VXi" style)
+        variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
+
+        # ZigWheels patterns with flexible case matching
         patterns = [
-            rf'{variant}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
-            rf'>{variant}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
-            rf'{variant}.*?Ex-showroom.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'{variant_pattern}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'>{variant_pattern}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'{variant_pattern}.*?Ex-showroom.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
         ]
 
         # Cross-variant validation
@@ -136,9 +139,12 @@ def scrape_v3cars(make: str, model: str, variant: str) -> Optional[Tuple[float, 
         html = response.text
         target_variant = variant.strip().upper()
 
+        # Create flexible variant pattern (handles "VXI" and "VXi" style)
+        variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
+
         patterns = [
-            rf'{variant}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
-            rf'>{variant}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'{variant_pattern}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'>{variant_pattern}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
         ]
 
         other_variants = ['LXI', 'VXI', 'ZXI', 'LX', 'VX', 'ZX', 'SIGMA', 'DELTA', 'ZETA', 'ALPHA']
@@ -198,9 +204,12 @@ def scrape_autocar_india(make: str, model: str, variant: str) -> Optional[Tuple[
         html = response.text
         target_variant = variant.strip().upper()
 
+        # Create flexible variant pattern (handles "VXI" and "VXi" style)
+        variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
+
         patterns = [
-            rf'{variant}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
-            rf'>{variant}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'{variant_pattern}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'>{variant_pattern}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
         ]
 
         other_variants = ['LXI', 'VXI', 'ZXI', 'LX', 'VX', 'ZX', 'SIGMA', 'DELTA', 'ZETA', 'ALPHA']
@@ -260,9 +269,12 @@ def scrape_smartprix(make: str, model: str, variant: str) -> Optional[Tuple[floa
         html = response.text
         target_variant = variant.strip().upper()
 
+        # Create flexible variant pattern (handles "VXI" and "VXi" style)
+        variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
+
         patterns = [
-            rf'{variant}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
-            rf'>{variant}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'{variant_pattern}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'>{variant_pattern}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
         ]
 
         other_variants = ['LXI', 'VXI', 'ZXI', 'LX', 'VX', 'ZX', 'SIGMA', 'DELTA', 'ZETA', 'ALPHA']

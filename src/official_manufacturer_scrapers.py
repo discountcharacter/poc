@@ -77,13 +77,16 @@ def scrape_maruti_official(model: str, variant: str) -> Optional[Tuple[float, st
         html = response.text
 
         # Look for variant-specific pricing
-        # Patterns: "VXI Rs. 6.59 Lakh*" or similar
+        # Patterns: "VXi Rs. 6.59 Lakh*" or similar (handles mixed case)
         target_variant = variant.strip().upper()
 
+        # Create flexible variant pattern (handles "VXI" and "VXi" style)
+        variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
+
         patterns = [
-            rf'{variant}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
-            rf'>{variant}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
-            rf'data-variant=["\']?{variant}["\']?[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'{variant_pattern}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'>{variant_pattern}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'data-variant=["\']?{variant_pattern}["\']?[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
         ]
 
         for pattern in patterns:
@@ -127,11 +130,14 @@ def scrape_hyundai_official(model: str, variant: str, city: str = "hyderabad") -
 
         target_variant = variant.strip().upper()
 
+        # Create flexible variant pattern (handles "VXI" and "VXi" style)
+        variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
+
         # Hyundai uses variant codes like "SX", "SX(O)", "N Line"
         patterns = [
-            rf'{variant}[^<]*?₹\s*([\d,]+)',
-            rf'>{variant}<[^>]*>.*?₹\s*([\d,]+)',
-            rf'{variant}.*?Ex-showroom.*?₹\s*([\d,]+)',
+            rf'{variant_pattern}[^<]*?₹\s*([\d,]+)',
+            rf'>{variant_pattern}<[^>]*>.*?₹\s*([\d,]+)',
+            rf'{variant_pattern}.*?Ex-showroom.*?₹\s*([\d,]+)',
         ]
 
         for pattern in patterns:
@@ -175,9 +181,12 @@ def scrape_tata_official(model: str, variant: str) -> Optional[Tuple[float, str]
 
         target_variant = variant.strip().upper()
 
+        # Create flexible variant pattern (handles "VXI" and "VXi" style)
+        variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
+
         patterns = [
-            rf'{variant}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
-            rf'>{variant}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'{variant_pattern}[^<]*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
+            rf'>{variant_pattern}<[^>]*>.*?(?:Rs\.?|₹)\s*([\d,\.]+)\s*(?:Lakh|L)',
         ]
 
         for pattern in patterns:
