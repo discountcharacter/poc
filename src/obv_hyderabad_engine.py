@@ -218,89 +218,55 @@ class OBVHyderabadEngine:
     def get_current_new_price(self, make: str, model: str, variant: str, year: int,
                              fuel_type: FuelType = None, month: int = 3, transmission: str = "Manual") -> float:
         """
-        Fetch current new vehicle price using HYBRID approach
+        Fetch current new vehicle price using web scraping with fallback
 
-        Uses Google Custom Search API + Direct HTML Scraping for accuracy.
+        Priority:
+        1. Direct web scraping (CarDekho/CarWale)
+        2. Fallback to segment-based estimation
 
         Args:
             make: Vehicle manufacturer
             model: Model name
             variant: Specific trim/variant
             year: Manufacturing year
-            fuel_type: Fuel type (required)
+            fuel_type: Fuel type
             month: Manufacturing month
             transmission: Transmission type
 
         Returns:
             Current ex-showroom price in INR
-
-        Raises:
-            ValueError: If API key not found or price fetch fails
         """
-        # Hybrid fetcher requires fuel type
-        if not fuel_type:
-            raise ValueError("Fuel type is required for price search")
+        # Try web scraping first
+        if SIMPLE_SCRAPER_AVAILABLE and variant and fuel_type:
+            fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
 
-        fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
+            try:
+                print(f"🔍 Fetching price via web scraping: {make} {model} {variant} {fuel_str}...")
+                scraper_result = get_simple_price(make, model, variant, fuel_str)
 
-        # ONLY use Hybrid fetcher - no fallbacks
-        if not PRICE_FETCHER_AVAILABLE:
-            raise ImportError(
-                "Hybrid price fetcher not available."
-            )
+                if scraper_result:
+                    ex_showroom, source_url = scraper_result
 
-        try:
-            print(f"🔍 Fetching price via Hybrid Search: {make} {model} {variant} {fuel_str}...")
-            price_data = price_fetcher.get_current_price(
-                make=make,
-                model=model,
-                variant=variant,
-                fuel=fuel_str,
-                year=year,
-                month=month,
-                transmission=transmission
-            )
+                    if ex_showroom and 300000 <= ex_showroom <= 15000000:
+                        self.recommendations.append(
+                            "✅ Price source: Direct web scraping (CarDekho/CarWale)"
+                        )
+                        self.recommendations.append(
+                            f"✅ Current ex-showroom price: ₹{ex_showroom:,.0f}"
+                        )
+                        print(f"   ✅ Found price: ₹{ex_showroom:,.0f}")
+                        return ex_showroom
+                    else:
+                        print(f"   ⚠️ Price {ex_showroom} outside valid range")
+                else:
+                    print("   ⚠️ Web scraping returned no price")
 
-            source = price_data.get("source")
-            ex_showroom = price_data.get("ex_showroom_price")
-            source_url = price_data.get("source_url", "N/A")
+            except Exception as e:
+                print(f"   ⚠️ Web scraping error: {e}")
 
-            print(f"📊 Price received: ₹{ex_showroom:,.0f} from {source}")
-
-            # Update diagnostic message
-            if source == "hybrid_search_scrape":
-                self.recommendations.append(
-                    f"✅ Price source: Google Search + HTML Scraping (MOST ACCURATE)"
-                )
-                self.recommendations.append(
-                    f"   Source URL: {source_url[:80]}..."
-                )
-
-            # Validate price range
-            if ex_showroom and 300000 <= ex_showroom <= 15000000:
-                self.recommendations.append(
-                    f"✅ Current ex-showroom price: ₹{ex_showroom:,.0f}"
-                )
-                return ex_showroom
-            else:
-                raise ValueError(
-                    f"Price ₹{ex_showroom:,.0f} outside valid range (3L-1.5Cr)"
-                )
-
-        except Exception as e:
-            error_msg = str(e)
-            print(f"❌ Price fetch failed: {error_msg}")
-            # Re-raise - NO FALLBACKS ALLOWED!
-            raise
-
-    def get_current_new_price_DISABLED_FALLBACK(self, make: str, model: str, variant: str, year: int,
-                             fuel_type: FuelType = None, month: int = 3, transmission: str = "Manual") -> float:
-        """
-        DISABLED: Old fallback estimation method
-        Kept for reference only - should never be called
-        """
         # Fallback to segment-based estimation
-        segments_disabled = {
+        print("   Using fallback estimation...")
+        segments = {
             'alto': 450000,
             'kwid': 450000,
             'wagon r': 550000,
@@ -368,8 +334,12 @@ class OBVHyderabadEngine:
             inflation_factor = 1.06 ** years_diff
             base_price = base_price * inflation_factor
 
-        # This method should never be called
-        raise NotImplementedError("Fallback estimation disabled - use Gemini API only")
+        self.warnings.append(
+            f"ℹ️ Using estimated base price (₹{base_price:,.0f}). "
+            "Web scraping did not find variant-specific price."
+        )
+
+        return base_price
 
     def calculate_segmented_depreciation(self, age_years: float, base_price: float) -> Tuple[float, Dict[str, float]]:
         """
