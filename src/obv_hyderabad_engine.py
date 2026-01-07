@@ -26,23 +26,22 @@ from enum import Enum
 import sys
 import os
 
-# Import NEW Gemini-based price fetcher with robust path handling
+# Import simple price scraper (Direct web scraping - PROVEN RELIABLE)
 try:
     # Add src directory to path if not already there
     src_dir = os.path.dirname(os.path.abspath(__file__))
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
 
-    from price_fetcher_gemini import price_fetcher
-    PRICE_FETCHER_AVAILABLE = True
-    print("✅ Using NEW Gemini-based price fetcher with Google Search grounding")
+    from simple_price_scraper import get_simple_price
+    SIMPLE_SCRAPER_AVAILABLE = True
+    print("✅ Using simple web scraper (CarDekho/CarWale direct scraping)")
 except ImportError as e:
-    print(f"⚠️ Gemini price fetcher import failed: {e}")
-    print("   Falling back to estimate-based pricing")
-    PRICE_FETCHER_AVAILABLE = False
+    print(f"⚠️ Simple scraper import failed: {e}")
+    SIMPLE_SCRAPER_AVAILABLE = False
 except Exception as e:
-    print(f"⚠️ Price fetcher error: {e}")
-    PRICE_FETCHER_AVAILABLE = False
+    print(f"⚠️ Simple scraper error: {e}")
+    SIMPLE_SCRAPER_AVAILABLE = False
 
 
 class FuelType(Enum):
