@@ -108,8 +108,9 @@ def scrape_cardekho_simple(make: str, model: str, variant: str) -> Optional[Tupl
         found_variants = []  # Track which variants we found (for debugging)
 
         # Common variant names to check for cross-contamination
+        # Exclude very short variants (E, S, EX) - too generic, cause false positives in HTML
         other_variants = ['LXI', 'VXI', 'ZXI', 'LX', 'VX', 'ZX', 'SIGMA', 'DELTA', 'ZETA', 'ALPHA',
-                         'AMBIENTE', 'TREND', 'TITANIUM', 'S', 'SX', 'EX', 'E', 'S+', 'SX+']
+                         'AMBIENTE', 'TREND', 'TITANIUM', 'SX', 'S+', 'SX+']
         other_variants = [v for v in other_variants if v.upper() != target_variant]
 
         for pattern in patterns:
@@ -141,15 +142,13 @@ def scrape_cardekho_simple(make: str, model: str, variant: str) -> Optional[Tupl
                     print(f"   ✅ Valid price found: ₹{price:,.0f}")
 
         if found_prices:
-            # Use median price if multiple found
-            median_price = sorted(found_prices)[len(found_prices) // 2]
+            # Take MINIMUM price - most likely to be ex-showroom (since ex-showroom < on-road)
+            # Aggregator sites often mix both price types, minimum filters correctly
+            min_price = min(found_prices)
 
-            # Convert on-road to ex-showroom (rough estimate: -17%)
-            ex_showroom = median_price / 1.17
+            print(f"   ✅ Final price: ₹{min_price:,.0f} (using as ex-showroom)")
 
-            print(f"   ✅ Final price: ₹{median_price:,.0f} (on-road) → ₹{ex_showroom:,.0f} (ex-showroom)")
-
-            return (ex_showroom, url)
+            return (min_price, url)
 
         print(f"   ❌ No price found for {variant}")
         return None
@@ -187,7 +186,7 @@ def scrape_carwale_simple(make: str, model: str, variant: str) -> Optional[Tuple
         target_variant = variant.strip().upper()
         print(f"   Looking for variant: {target_variant}")
 
-        # STRICT patterns - same as CarDekho
+        # Generic variant patterns
         patterns = [
             rf'\b{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
             rf'\b{model}\s+{variant}\b[,:\s\-|]*(?:Rs\.?|₹)\s*([\d,\.\s]+\s*(?:Lakh|L)?)',
@@ -198,8 +197,9 @@ def scrape_carwale_simple(make: str, model: str, variant: str) -> Optional[Tuple
         found_prices = []
 
         # Common variant names to check for cross-contamination
+        # Exclude very short variants (E, S, EX) - too generic, cause false positives in HTML
         other_variants = ['LXI', 'VXI', 'ZXI', 'LX', 'VX', 'ZX', 'SIGMA', 'DELTA', 'ZETA', 'ALPHA',
-                         'AMBIENTE', 'TREND', 'TITANIUM', 'S', 'SX', 'EX', 'E', 'S+', 'SX+']
+                         'AMBIENTE', 'TREND', 'TITANIUM', 'SX', 'S+', 'SX+']
         other_variants = [v for v in other_variants if v.upper() != target_variant]
 
         for pattern in patterns:
@@ -229,12 +229,13 @@ def scrape_carwale_simple(make: str, model: str, variant: str) -> Optional[Tuple
                     print(f"   ✅ Valid: ₹{price:,.0f}")
 
         if found_prices:
-            median_price = sorted(found_prices)[len(found_prices) // 2]
-            ex_showroom = median_price / 1.17
+            # Take MINIMUM price - most likely to be ex-showroom (since ex-showroom < on-road)
+            # Aggregator sites often mix both price types, minimum filters correctly
+            min_price = min(found_prices)
 
-            print(f"   ✅ Final: ₹{ex_showroom:,.0f} (ex-showroom)")
+            print(f"   ✅ Final: ₹{min_price:,.0f} (using as ex-showroom)")
 
-            return (ex_showroom, url)
+            return (min_price, url)
 
         print(f"   ❌ No price found")
         return None
