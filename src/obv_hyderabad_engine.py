@@ -26,21 +26,32 @@ from enum import Enum
 import sys
 import os
 
-# Import simple price scraper (Direct web scraping - PROVEN RELIABLE)
+# Import MULTI-SOURCE PRICE VALIDATOR (MAXIMUM ACCURACY)
 try:
     # Add src directory to path if not already there
     src_dir = os.path.dirname(os.path.abspath(__file__))
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
 
-    from simple_price_scraper import get_simple_price
-    SIMPLE_SCRAPER_AVAILABLE = True
-    print("✅ Using simple web scraper (CarDekho/CarWale direct scraping)")
+    from multi_source_price_validator import get_accurate_price, ConfidenceLevel
+    MULTI_SOURCE_VALIDATOR_AVAILABLE = True
+    print("✅ Using MULTI-SOURCE PRICE VALIDATOR")
+    print("   Sources: Official Websites + CarDekho + CarWale + ZigWheels + V3Cars + AutocarIndia + Smartprix")
+    print("   Features: Cross-validation, Confidence scoring, Maximum accuracy")
 except ImportError as e:
-    print(f"⚠️ Simple scraper import failed: {e}")
-    SIMPLE_SCRAPER_AVAILABLE = False
+    print(f"⚠️ Multi-source validator import failed: {e}")
+    print(f"   Falling back to simple scraper...")
+    try:
+        from simple_price_scraper import get_simple_price
+        MULTI_SOURCE_VALIDATOR_AVAILABLE = False
+        SIMPLE_SCRAPER_AVAILABLE = True
+        print("✅ Using simple web scraper (CarDekho/CarWale direct scraping)")
+    except ImportError:
+        MULTI_SOURCE_VALIDATOR_AVAILABLE = False
+        SIMPLE_SCRAPER_AVAILABLE = False
 except Exception as e:
-    print(f"⚠️ Simple scraper error: {e}")
+    print(f"⚠️ Multi-source validator error: {e}")
+    MULTI_SOURCE_VALIDATOR_AVAILABLE = False
     SIMPLE_SCRAPER_AVAILABLE = False
 
 
@@ -217,11 +228,12 @@ class OBVHyderabadEngine:
     def get_current_new_price(self, make: str, model: str, variant: str, year: int,
                              fuel_type: FuelType = None, month: int = 3, transmission: str = "Manual") -> float:
         """
-        Fetch current new vehicle price using web scraping with fallback
+        Fetch current new vehicle price using MULTI-SOURCE VALIDATION
 
-        Priority:
-        1. Direct web scraping (CarDekho/CarWale)
-        2. Fallback to segment-based estimation
+        Priority (for MAXIMUM ACCURACY):
+        1. Multi-source validator (Official websites + 6 aggregators with cross-validation)
+        2. Simple web scraping (CarDekho/CarWale)
+        3. Fallback to segment-based estimation
 
         Args:
             make: Vehicle manufacturer
@@ -235,12 +247,43 @@ class OBVHyderabadEngine:
         Returns:
             Current ex-showroom price in INR
         """
-        # Try web scraping first
+        # PRIORITY 1: Multi-Source Validator (BEST ACCURACY)
+        if MULTI_SOURCE_VALIDATOR_AVAILABLE and variant and fuel_type:
+            fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
+
+            try:
+                price, confidence, warnings = get_accurate_price(make, model, variant, fuel_str, city="hyderabad")
+
+                if price and 300000 <= price <= 15000000:
+                    # Add confidence and source information
+                    self.recommendations.append(
+                        f"✅ Price source: Multi-Source Validation ({confidence})"
+                    )
+                    self.recommendations.append(
+                        f"✅ Current ex-showroom price: ₹{price:,.0f}"
+                    )
+
+                    # Add any warnings from the validator
+                    for warning in warnings:
+                        if "MANUAL VERIFICATION REQUIRED" in warning or "HIGH DISAGREEMENT" in warning:
+                            self.warnings.append(warning)
+                        else:
+                            self.recommendations.append(warning)
+
+                    print(f"   ✅ Multi-source validated price: ₹{price:,.0f} ({confidence})")
+                    return price
+                else:
+                    print(f"   ⚠️ Multi-source validator returned invalid price or failed")
+
+            except Exception as e:
+                print(f"   ⚠️ Multi-source validator error: {e}")
+
+        # PRIORITY 2: Simple Web Scraping Fallback
         if SIMPLE_SCRAPER_AVAILABLE and variant and fuel_type:
             fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
 
             try:
-                print(f"🔍 Fetching price via web scraping: {make} {model} {variant} {fuel_str}...")
+                print(f"🔍 Fallback: Using simple web scraping...")
                 scraper_result = get_simple_price(make, model, variant, fuel_str)
 
                 if scraper_result:
@@ -253,6 +296,9 @@ class OBVHyderabadEngine:
                         self.recommendations.append(
                             f"✅ Current ex-showroom price: ₹{ex_showroom:,.0f}"
                         )
+                        self.warnings.append(
+                            "⚠️ Using single-source price (simple scraper). Multi-source validator unavailable."
+                        )
                         print(f"   ✅ Found price: ₹{ex_showroom:,.0f}")
                         return ex_showroom
                     else:
@@ -263,7 +309,7 @@ class OBVHyderabadEngine:
             except Exception as e:
                 print(f"   ⚠️ Web scraping error: {e}")
 
-        # Fallback to segment-based estimation
+        # PRIORITY 3: Segment-based estimation (LAST RESORT)
         print("   Using fallback estimation...")
         segments = {
             'alto': 450000,
