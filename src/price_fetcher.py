@@ -66,21 +66,26 @@ def normalize_price_inline(price_str: str) -> Optional[float]:
 
 
 def extract_price_inline(search_results: list, variant: str) -> Optional[Tuple[float, str]]:
-    """Extract price for specific variant using regex patterns"""
+    """Extract price for specific variant using regex patterns with flexible case matching"""
     import re
 
     target_variant_normalized = variant.strip().upper()
+
+    # Create flexible variant pattern (handles both "VXI" and "VXi" style)
+    variant_pattern = variant.strip().replace('I', '[Ii]').replace('i', '[Ii]')
+
     all_matches = []
     all_variants_found = []  # Track all variants found (for debugging)
 
+    # Updated patterns with flexible variant matching
     patterns = [
-        r'([A-Za-z]+[A-Za-z0-9]*)\s*(?:\([^)]+\))?\s*[·•-]?\s*(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
-        r'([A-Za-z]+[A-Za-z0-9]*)\s*:\s*(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
-        r'([A-Za-z]+[A-Za-z0-9]*)\s*\|\s*Price.*?(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
-        r'([A-Za-z]+[A-Za-z0-9]*)\s+(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
+        rf'({variant_pattern})\s*(?:\([^)]+\))?\s*[·•-]?\s*(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
+        rf'({variant_pattern})\s*:\s*(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
+        rf'({variant_pattern})\s*\|\s*Price.*?(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
+        rf'({variant_pattern})\s+(?:Rs\.?|₹)\s*([\d,\.]+(?:\s*(?:Lakh|L|Crore|Cr))?)',
     ]
 
-    print(f"🔍 DEBUG: Looking for variant '{target_variant_normalized}'")
+    print(f"🔍 DEBUG: Looking for variant '{target_variant_normalized}' (pattern: {variant_pattern})")
 
     for idx, result in enumerate(search_results):
         text = f"{result.get('title', '')} {result.get('snippet', '')}"
@@ -99,7 +104,8 @@ def extract_price_inline(search_results: list, variant: str) -> Optional[Tuple[f
 
                 print(f"      Pattern {pattern_idx+1} found: {variant_found} = {price_str}")
 
-                if variant_found == target_variant_normalized:
+                # Normalize both for comparison (case-insensitive)
+                if variant_found.upper() == target_variant_normalized:
                     price = normalize_price_inline(price_str)
                     if price and 300000 <= price <= 15000000:
                         print(f"      ✅ MATCH! {variant_found} = ₹{price:,.0f}")
