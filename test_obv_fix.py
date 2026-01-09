@@ -127,24 +127,24 @@ status2, price2 = test_case(
     expected_c2b_max=548529
 )
 
-# Test Case 3: Beetle 2016
+# Test Case 3: Beetle 2016 (DISCONTINUED MODEL)
 vehicle3 = VehicleInput(
     make="Volkswagen",
     model="Beetle",
-    variant="2.0 TDI",
+    variant="1.4 Tsi",
     year=2016,
-    registration_date=date(2016, 2, 20),
-    fuel_type=FuelType.DIESEL,
-    odometer=85000,
-    owners=2,
-    transmission="Automatic",
+    registration_date=date(2016, 3, 15),
+    fuel_type=FuelType.PETROL,
+    odometer=75000,
+    owners=1,
+    transmission="Manual",
 
-    # Good condition (older car)
+    # Very good condition
     frame_damage=False,
-    dents_scratches="Moderate",
+    dents_scratches="Minor",
     repainted=False,
     engine_smoke="None",
-    tire_tread=65,
+    tire_tread=85,
     ac_working=True,
     electrical_issues=False,
     service_history=True,
@@ -153,16 +153,16 @@ vehicle3 = VehicleInput(
 
     engine_noise="Normal",
     transmission_condition="Smooth",
-    suspension_condition="Fair",
+    suspension_condition="Good",
     brake_condition="Good",
     interior_condition="Good",
     rust_present=False
 )
 
 status3, price3 = test_case(
-    "2016 Volkswagen Beetle 2.0 TDI",
+    "2016 Volkswagen Beetle 1.4 TSI (DISCONTINUED)",
     vehicle3,
-    expected_c2b_min=1006030,  # OBV range (C2C ~₹10L, so C2B ~₹8.8-9.5L)
+    expected_c2b_min=1006030,  # OBV range
     expected_c2b_max=1068258
 )
 
