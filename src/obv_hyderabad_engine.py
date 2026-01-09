@@ -250,12 +250,32 @@ class OBVHyderabadEngine:
         age_years = age_days / 365.25
         return age_years
 
+    # List of discontinued models that should use HISTORICAL pricing
+    DISCONTINUED_MODELS = {
+        'beetle', 'volkswagen beetle', 'vw beetle',
+        'figo', 'ford figo', 'ecosport', 'ford ecosport',  # Ford exited India
+        'chevrolet', 'beat', 'sail', 'cruze',  # Chevrolet exited
+        'datsun', 'redi-go', 'go', 'go+',  # Datsun discontinued
+        'palio', 'linea', 'punto', 'avventura',  # Fiat mostly discontinued
+        'micra', 'sunny', 'terrano',  # Nissan discontinued models
+        'storme', 'safari storme',  # Tata discontinued
+    }
+
+    def is_discontinued(self, make: str, model: str) -> bool:
+        """Check if a model is discontinued"""
+        make_model = f"{make} {model}".lower()
+        model_lower = model.lower()
+
+        # Check if model or make+model in discontinued list
+        return any(disc in make_model or disc in model_lower
+                   for disc in self.DISCONTINUED_MODELS)
+
     def get_current_on_road_price(self, make: str, model: str, variant: str,
                                    fuel_type: FuelType = None, state: str = "telangana") -> float:
         """
         Get CURRENT on-road price (what it would cost to buy NEW today)
 
-        This is THE CORRECT OBV METHOD:
+        This is THE CORRECT OBV METHOD for CURRENT PRODUCTION cars:
         - Uses CURRENT new vehicle on-road price (today's market price)
         - NOT the historical price from purchase year
         - Shows "what % of current new value" the used car is worth
@@ -398,6 +418,156 @@ class OBVHyderabadEngine:
             "⚠️ On-road calculation unavailable, using ex-showroom estimate + 18% buffer"
         )
         return current_ex_showroom * 1.18 if current_ex_showroom else 800000 * 1.18
+
+    def get_original_on_road_price(self, make: str, model: str, variant: str, year: int,
+                                   month: int = 3, fuel_type: FuelType = None, state: str = "telangana") -> float:
+        """
+        Get ORIGINAL on-road price from the year vehicle was purchased
+
+        This is THE CORRECT OBV METHOD for DISCONTINUED cars:
+        - Uses the ACTUAL on-road price paid by the owner (purchase year)
+        - NOT a current equivalent (because the model doesn't exist anymore)
+        - Represents value loss from original investment
+
+        Priority:
+        1. Historical price database (curated data for popular models)
+        2. Fetch current price and deflate backwards
+        3. Segment-based estimation with deflation
+
+        Args:
+            make: Vehicle manufacturer
+            model: Model name
+            variant: Specific trim/variant
+            year: Year of purchase
+            month: Month of purchase
+            fuel_type: Fuel type
+            state: State of registration (for tax calculation)
+
+        Returns:
+            Original on-road price in INR
+        """
+        print(f"🎯 OBV HISTORICAL METHOD: Getting ORIGINAL on-road price for {year} {make} {model} {variant}")
+
+        # PRIORITY 1: Try historical price database (curated accurate data)
+        if HISTORICAL_PRICES_AVAILABLE:
+            historical_result = get_historical_on_road_price(make, model, variant, year, month, state)
+
+            if historical_result:
+                on_road_price, breakdown = historical_result
+
+                self.recommendations.append(
+                    f"✅ Historical price database: {year} on-road price ₹{on_road_price:,.0f}"
+                )
+                self.recommendations.append(
+                    f"   Ex-showroom: ₹{breakdown['ex_showroom']:,.0f} + "
+                    f"Road tax: ₹{breakdown['road_tax']:,.0f} ({breakdown['road_tax_rate']}) + "
+                    f"Insurance: ₹{breakdown['insurance']:,.0f}"
+                )
+
+                print(f"✅ Found in historical database: ₹{on_road_price:,.0f}")
+                return on_road_price
+
+        # PRIORITY 2: Fetch current ex-showroom price and estimate backwards
+        ex_showroom_historical = None
+
+        # Try to get current price and estimate backwards
+        if PRICE_FETCHER_AVAILABLE and fuel_type:
+            fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
+
+            try:
+                print(f"🔍 Fetching current price to estimate {year} price...")
+                price_data = price_fetcher.get_current_price(
+                    make=make, model=model, variant=variant, fuel=fuel_str, year=datetime.now().year
+                )
+
+                if price_data and price_data.get("ex_showroom_price"):
+                    current_ex_showroom = price_data.get("ex_showroom_price")
+
+                    if 300000 <= current_ex_showroom <= 15000000:
+                        # Estimate historical price by deflating current price
+                        if HISTORICAL_PRICES_AVAILABLE:
+                            ex_showroom_historical = estimate_historical_price(
+                                current_ex_showroom, datetime.now().year, year
+                            )
+                            print(f"   Estimated {year} ex-showroom: ₹{ex_showroom_historical:,.0f}")
+                            self.recommendations.append(
+                                f"✅ Estimated {year} ex-showroom from current price: ₹{ex_showroom_historical:,.0f}"
+                            )
+            except Exception as e:
+                print(f"⚠️ Price fetcher error: {e}")
+
+        # PRIORITY 3: Fallback segment-based estimation with deflation
+        if not ex_showroom_historical:
+            # Historical segment prices (what these models cost when new)
+            historical_segments = {
+                # Beetle had different prices depending on variant
+                # 1.4 TSI was cheaper than 2.0 TDI
+                'beetle': {2016: 2350000, 2017: 2450000, 2018: 2550000, 2019: 2600000},  # Discontinued 2019
+                'figo': {2015: 450000, 2016: 470000, 2017: 490000, 2018: 510000, 2019: 530000},
+                'ecosport': {2015: 700000, 2016: 750000, 2017: 800000, 2018: 850000, 2019: 900000},
+            }
+
+            model_lower = model.lower()
+
+            # Try to get historical price for the specific year
+            if model_lower in historical_segments and year in historical_segments[model_lower]:
+                ex_showroom_historical = historical_segments[model_lower][year]
+                print(f"   Using historical segment price for {year}: ₹{ex_showroom_historical:,.0f}")
+                self.recommendations.append(
+                    f"✅ Historical segment price ({year}): ₹{ex_showroom_historical:,.0f}"
+                )
+            else:
+                # Use current segment pricing and deflate
+                segments = {
+                    'alto': 450000, 'kwid': 450000, 'wagon r': 550000, 'wagonr': 550000,
+                    'santro': 500000, 'swift': 650000, 'baleno': 750000, 'i20': 750000,
+                    'celerio': 550000, 'aura': 700000, 'beetle': 2500000,
+                }
+
+                base_price = 800000  # Default
+                for key, price in segments.items():
+                    if key in model_lower:
+                        base_price = price
+                        break
+
+                # Deflate to purchase year
+                current_year = datetime.now().year
+                years_diff = current_year - year
+
+                if years_diff > 0:
+                    # Deflate backwards (6% inflation per year)
+                    deflation_factor = 1.06 ** years_diff
+                    ex_showroom_historical = base_price / deflation_factor
+                else:
+                    ex_showroom_historical = base_price
+
+                print(f"   Estimated {year} ex-showroom from segment: ₹{ex_showroom_historical:,.0f}")
+                self.warnings.append(
+                    f"ℹ️ Estimated {year} ex-showroom price (₹{ex_showroom_historical:,.0f}) - "
+                    "not in historical database"
+                )
+
+        # Calculate on-road price for that year
+        if HISTORICAL_PRICES_AVAILABLE and ex_showroom_historical:
+            on_road_price, breakdown = calculate_on_road_price(ex_showroom_historical, year, state)
+
+            self.recommendations.append(
+                f"✅ Calculated {year} on-road price: ₹{on_road_price:,.0f}"
+            )
+            self.recommendations.append(
+                f"   Components: Ex-showroom ₹{breakdown['ex_showroom']:,.0f} + "
+                f"Road tax ₹{breakdown['road_tax']:,.0f} + "
+                f"Insurance ₹{breakdown['insurance']:,.0f} + "
+                f"Registration ₹{breakdown['registration'] + breakdown['smart_card'] + breakdown['cess'] + breakdown['other_charges']:,.0f}"
+            )
+
+            return on_road_price
+
+        # Last resort: return just the ex-showroom estimate
+        self.warnings.append(
+            "⚠️ On-road calculation unavailable, using ex-showroom estimate"
+        )
+        return ex_showroom_historical if ex_showroom_historical else 800000
 
     def calculate_segmented_depreciation(self, age_years: float, base_price: float) -> Tuple[float, Dict[str, float]]:
         """
@@ -866,10 +1036,25 @@ class OBVHyderabadEngine:
         # 1. Calculate vehicle age
         age_years = self.calculate_vehicle_age(vehicle.registration_date)
 
-        # 2. Get CURRENT on-road price (OBV method - what % of new value is the used car worth)
-        base_price = self.get_current_on_road_price(
-            vehicle.make, vehicle.model, vehicle.variant, vehicle.fuel_type
-        )
+        # 2. Get base price using correct methodology
+        # HYBRID APPROACH: Current production uses CURRENT prices, discontinued uses HISTORICAL prices
+        if self.is_discontinued(vehicle.make, vehicle.model):
+            # Discontinued model: Use ORIGINAL purchase price
+            month = vehicle.registration_date.month if hasattr(vehicle, 'registration_date') else 3
+            base_price = self.get_original_on_road_price(
+                vehicle.make, vehicle.model, vehicle.variant, vehicle.year, month, vehicle.fuel_type
+            )
+            self.recommendations.append(
+                f"🔄 Discontinued model detected - using HISTORICAL pricing methodology"
+            )
+        else:
+            # Current production: Use CURRENT new vehicle price
+            base_price = self.get_current_on_road_price(
+                vehicle.make, vehicle.model, vehicle.variant, vehicle.fuel_type
+            )
+            self.recommendations.append(
+                f"✅ Current production model - using CURRENT pricing methodology"
+            )
 
         # 3. Calculate segmented depreciation
         depreciated_value, dep_breakdown, dep_percentage = self.calculate_segmented_depreciation(
