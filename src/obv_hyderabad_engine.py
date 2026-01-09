@@ -42,6 +42,43 @@ except Exception as e:
     print(f"Price fetcher error: {e}")
     PRICE_FETCHER_AVAILABLE = False
 
+# Import historical price database (CRITICAL for accurate OBV)
+try:
+    from historical_price_database import (
+        get_historical_on_road_price,
+        get_historical_ex_showroom_price,
+        calculate_on_road_price,
+        estimate_historical_price,
+        get_market_sentiment,
+        MarketSentiment,
+        SENTIMENT_MULTIPLIERS
+    )
+    HISTORICAL_PRICES_AVAILABLE = True
+    print("✅ Historical price database loaded")
+except ImportError as e:
+    print(f"⚠️ Historical price database import failed: {e}")
+    HISTORICAL_PRICES_AVAILABLE = False
+except Exception as e:
+    print(f"⚠️ Historical price database error: {e}")
+    HISTORICAL_PRICES_AVAILABLE = False
+
+# Import market sentiment analyzer
+try:
+    from market_sentiment_analyzer import (
+        calculate_market_sentiment_multiplier,
+        get_brand_resale_multiplier,
+        get_fuel_type_sentiment,
+        get_segment_sentiment
+    )
+    MARKET_SENTIMENT_AVAILABLE = True
+    print("✅ Market sentiment analyzer loaded")
+except ImportError as e:
+    print(f"⚠️ Market sentiment analyzer import failed: {e}")
+    MARKET_SENTIMENT_AVAILABLE = False
+except Exception as e:
+    print(f"⚠️ Market sentiment analyzer error: {e}")
+    MARKET_SENTIMENT_AVAILABLE = False
+
 
 class FuelType(Enum):
     """Fuel type enumeration with standard annual mileage"""
@@ -213,165 +250,150 @@ class OBVHyderabadEngine:
         age_years = age_days / 365.25
         return age_years
 
-    def get_current_new_price(self, make: str, model: str, variant: str, year: int, fuel_type: FuelType = None) -> float:
+    def get_original_on_road_price(self, make: str, model: str, variant: str, year: int,
+                                   month: int = 3, fuel_type: FuelType = None, state: str = "telangana") -> float:
         """
-        Fetch current new vehicle price using live search or fallback
+        Get ORIGINAL on-road price from the year vehicle was purchased
 
-        Uses Google Search + Gemini to find current ex-showroom prices in Hyderabad.
-        Falls back to estimation if live search fails.
+        This is THE KEY DIFFERENCE for OBV accuracy:
+        - Uses the ACTUAL on-road price paid by the owner (purchase year)
+        - NOT the current ex-showroom price
+        - Represents true value loss from original investment
+
+        Priority:
+        1. Historical price database (curated data for popular models)
+        2. Live price fetcher + on-road calculation
+        3. Estimation + on-road calculation
 
         Args:
             make: Vehicle manufacturer
             model: Model name
             variant: Specific trim/variant
-            year: Manufacturing year
-            fuel_type: Fuel type (for live search)
+            year: Year of purchase
+            month: Month of purchase
+            fuel_type: Fuel type
+            state: State of registration (for tax calculation)
 
         Returns:
-            Current ex-showroom price in INR
+            Original on-road price in INR
         """
-        # Try live price fetcher first
-        if not PRICE_FETCHER_AVAILABLE:
-            self.warnings.append(
-                "⚠️ Live price fetcher not available. Check if price_fetcher.py is accessible "
-                "and all dependencies (google-generativeai, requests) are installed."
-            )
-        elif not fuel_type:
-            self.warnings.append(
-                "⚠️ Fuel type not provided. Live price search requires fuel type."
-            )
-        else:
+        print(f"🎯 OBV METHOD: Getting ORIGINAL on-road price for {year} {make} {model} {variant}")
+
+        # PRIORITY 1: Try historical price database (curated accurate data)
+        if HISTORICAL_PRICES_AVAILABLE:
+            historical_result = get_historical_on_road_price(make, model, variant, year, month, state)
+
+            if historical_result:
+                on_road_price, breakdown = historical_result
+
+                self.recommendations.append(
+                    f"✅ Historical price database: {year} on-road price ₹{on_road_price:,.0f}"
+                )
+                self.recommendations.append(
+                    f"   Ex-showroom: ₹{breakdown['ex_showroom']:,.0f} + "
+                    f"Road tax: ₹{breakdown['road_tax']:,.0f} ({breakdown['road_tax_rate']}) + "
+                    f"Insurance: ₹{breakdown['insurance']:,.0f}"
+                )
+
+                print(f"✅ Found in historical database: ₹{on_road_price:,.0f}")
+                return on_road_price
+
+        # PRIORITY 2: Fetch current ex-showroom price and calculate historical on-road
+        # This is for models not in our curated database
+        ex_showroom_historical = None
+
+        # Try to get current price and estimate backwards
+        if PRICE_FETCHER_AVAILABLE and fuel_type:
             fuel_str = fuel_type.value if isinstance(fuel_type, FuelType) else str(fuel_type)
 
             try:
-                print(f"🔍 Attempting live price search for {make} {model} {variant} {fuel_str}...")
+                print(f"🔍 Fetching current price to estimate {year} price...")
                 price_data = price_fetcher.get_current_price(
-                    make=make,
-                    model=model,
-                    variant=variant,
-                    fuel=fuel_str,
-                    year=year
+                    make=make, model=model, variant=variant, fuel=fuel_str, year=datetime.now().year
                 )
 
-                if price_data:
-                    source = price_data.get("source")
-                    print(f"📊 Price data received. Source: {source}")
+                if price_data and price_data.get("ex_showroom_price"):
+                    current_ex_showroom = price_data.get("ex_showroom_price")
 
-                    # Add diagnostic info about extraction method
-                    if source == "simple_scraper":
-                        self.recommendations.append("✅ Extraction method: Simple string-based scraping (MOST RELIABLE)")
-                    elif source == "carwale_scraper":
-                        self.recommendations.append("🎯 Extraction method: Direct CarWale/CarDekho scraping (RELIABLE)")
-                    elif source == "regex_extraction":
-                        self.recommendations.append("🔍 Extraction method: Regex pattern matching (reliable)")
-                    elif source == "gemini_extraction":
-                        self.warnings.append("⚠️ All scrapers and regex extraction failed - fell back to Gemini (less reliable for variant matching)")
-                    elif source == "carwale_direct":
-                        self.recommendations.append("🔍 Extraction method: Direct CarWale scraping")
-
-                    if source != "fallback_estimate":
-                        # Use ex-showroom price from live search
-                        ex_showroom = price_data.get("ex_showroom_price")
-                        if ex_showroom and 300000 <= ex_showroom <= 15000000:
+                    if 300000 <= current_ex_showroom <= 15000000:
+                        # Estimate historical price by deflating current price
+                        if HISTORICAL_PRICES_AVAILABLE:
+                            ex_showroom_historical = estimate_historical_price(
+                                current_ex_showroom, datetime.now().year, year
+                            )
+                            print(f"   Estimated {year} ex-showroom: ₹{ex_showroom_historical:,.0f}")
                             self.recommendations.append(
-                                f"✅ Using live price data from {source}: ₹{ex_showroom:,.0f}"
+                                f"✅ Estimated {year} ex-showroom from current price: ₹{ex_showroom_historical:,.0f}"
                             )
-                            return ex_showroom
-                        else:
-                            print(f"⚠️ Price validation failed: ₹{ex_showroom}")
-                            self.warnings.append(
-                                f"⚠️ Live price found (₹{ex_showroom:,.0f}) but outside valid range. Using fallback."
-                            )
-                    else:
-                        print(f"ℹ️ Price fetcher returned fallback estimate")
-                        self.warnings.append(
-                            "ℹ️ Live price search returned no results. Using fallback estimate."
-                        )
-                else:
-                    print("⚠️ No price data returned from fetcher")
-
             except Exception as e:
-                error_msg = str(e)
-                print(f"❌ Price fetcher error: {error_msg}")
-                self.warnings.append(
-                    f"⚠️ Live price search failed: {error_msg[:100]}. Using fallback."
-                )
+                print(f"⚠️ Price fetcher error: {e}")
 
-        # Fallback to segment-based estimation
-        segments = {
-            'alto': 450000,
-            'kwid': 450000,
-            'wagon r': 550000,
-            'wagonr': 550000,
-            'santro': 500000,
-            'swift': 650000,
-            'baleno': 750000,
-            'i20': 750000,
-            'polo': 750000,
-            'jazz': 800000,
-            'city': 1200000,
-            'verna': 1200000,
-            'ciaz': 1000000,
-            'creta': 1500000,
-            'seltos': 1600000,
-            'venue': 1200000,
-            'brezza': 1100000,
-            'vitara brezza': 1100000,
-            'ecosport': 1100000,
-            'compass': 2500000,
-            'harrier': 2000000,
-            'fortuner': 3500000,
-            'innova': 2500000,
-            'crysta': 2500000,
-            'ertiga': 1000000,
-            'xuv': 1800000,
-            'thar': 1500000,
-            'nexon': 900000,
-            'punch': 700000,
-            'altroz': 700000,
-            'safari': 1800000,
-            'scorpio': 1600000,
-            'grand i10': 600000,
-            'elantra': 2000000,
-            'tucson': 3000000,
-            'kona': 2500000,
-            'alcazar': 1800000,
-            'sonet': 900000,
-            'carens': 1200000,
-            'carnival': 3500000,
-            'glanza': 700000,
-            'urban cruiser': 1100000,
-            'hyryder': 1200000,
-            'fronx': 800000,
-            'jimny': 1300000,
-            'ignis': 600000,
-            'dzire': 700000,
-            's-presso': 450000,
-            'eeco': 500000,
-        }
+        # PRIORITY 3: Fallback segment-based estimation
+        if not ex_showroom_historical:
+            segments = {
+                'alto': 450000, 'kwid': 450000, 'wagon r': 550000, 'wagonr': 550000,
+                'santro': 500000, 'swift': 650000, 'baleno': 750000, 'i20': 750000,
+                'polo': 750000, 'jazz': 800000, 'city': 1200000, 'verna': 1200000,
+                'ciaz': 1000000, 'creta': 1500000, 'seltos': 1600000, 'venue': 1200000,
+                'brezza': 1100000, 'vitara brezza': 1100000, 'ecosport': 1100000,
+                'compass': 2500000, 'harrier': 2000000, 'fortuner': 3500000,
+                'innova': 2500000, 'crysta': 2500000, 'ertiga': 1000000,
+                'xuv': 1800000, 'thar': 1500000, 'nexon': 900000, 'punch': 700000,
+                'altroz': 700000, 'safari': 1800000, 'scorpio': 1600000,
+                'grand i10': 600000, 'elantra': 2000000, 'tucson': 3000000,
+                'kona': 2500000, 'alcazar': 1800000, 'sonet': 900000,
+                'carens': 1200000, 'carnival': 3500000, 'glanza': 700000,
+                'urban cruiser': 1100000, 'hyryder': 1200000, 'fronx': 800000,
+                'jimny': 1300000, 'ignis': 600000, 'dzire': 700000,
+                's-presso': 450000, 'eeco': 500000,
+            }
 
-        model_lower = model.lower()
-        base_price = 800000  # Default fallback
+            model_lower = model.lower()
+            base_price = 800000  # Default
 
-        for key, price in segments.items():
-            if key in model_lower:
-                base_price = price
-                break
+            for key, price in segments.items():
+                if key in model_lower:
+                    base_price = price
+                    break
 
-        # Adjust for inflation (6% per year from current year)
-        current_year = datetime.now().year
-        years_diff = current_year - year
+            # This base price is for current year, deflate to purchase year
+            current_year = datetime.now().year
+            years_diff = current_year - year
 
-        if years_diff > 0:
-            inflation_factor = 1.06 ** years_diff
-            base_price = base_price * inflation_factor
+            if years_diff > 0:
+                # Deflate backwards (opposite of inflation)
+                deflation_factor = 1.06 ** years_diff
+                ex_showroom_historical = base_price / deflation_factor
+            else:
+                ex_showroom_historical = base_price
 
+            print(f"   Estimated {year} ex-showroom from segment: ₹{ex_showroom_historical:,.0f}")
+            self.warnings.append(
+                f"ℹ️ Estimated {year} ex-showroom price (₹{ex_showroom_historical:,.0f}) - "
+                "not in historical database"
+            )
+
+        # Calculate on-road price for that year
+        if HISTORICAL_PRICES_AVAILABLE and ex_showroom_historical:
+            on_road_price, breakdown = calculate_on_road_price(ex_showroom_historical, year, state)
+
+            self.recommendations.append(
+                f"✅ Calculated {year} on-road price: ₹{on_road_price:,.0f}"
+            )
+            self.recommendations.append(
+                f"   Components: Ex-showroom ₹{breakdown['ex_showroom']:,.0f} + "
+                f"Road tax ₹{breakdown['road_tax']:,.0f} + "
+                f"Insurance ₹{breakdown['insurance']:,.0f} + "
+                f"Registration ₹{breakdown['registration'] + breakdown['smart_card'] + breakdown['cess'] + breakdown['other_charges']:,.0f}"
+            )
+
+            return on_road_price
+
+        # Last resort: return just the ex-showroom estimate
         self.warnings.append(
-            f"⚠️ Using estimated base price (₹{base_price:,.0f}). "
-            "Live price search unavailable or failed."
+            "⚠️ On-road calculation unavailable, using ex-showroom estimate"
         )
-
-        return base_price
+        return ex_showroom_historical if ex_showroom_historical else 800000
 
     def calculate_segmented_depreciation(self, age_years: float, base_price: float) -> Tuple[float, Dict[str, float]]:
         """
@@ -840,9 +862,10 @@ class OBVHyderabadEngine:
         # 1. Calculate vehicle age
         age_years = self.calculate_vehicle_age(vehicle.registration_date)
 
-        # 2. Get current new vehicle price (with live search)
-        base_price = self.get_current_new_price(
-            vehicle.make, vehicle.model, vehicle.variant, vehicle.year, vehicle.fuel_type
+        # 2. Get ORIGINAL on-road price (OBV method - what owner paid)
+        month = vehicle.registration_date.month if hasattr(vehicle, 'registration_date') else 3
+        base_price = self.get_original_on_road_price(
+            vehicle.make, vehicle.model, vehicle.variant, vehicle.year, month, vehicle.fuel_type
         )
 
         # 3. Calculate segmented depreciation
@@ -869,9 +892,31 @@ class OBVHyderabadEngine:
         location_multiplier = self.calculate_hyderabad_factor(
             vehicle.make, vehicle.model, vehicle.fuel_type, age_years
         )
-        final_fmv = value_after_ownership * location_multiplier
+        value_after_location = value_after_ownership * location_multiplier
 
-        # 8. Calculate all transaction context prices
+        # 8. Apply market sentiment adjustments (OBV KEY FEATURE)
+        market_sentiment_multiplier = 1.00
+        if MARKET_SENTIMENT_AVAILABLE:
+            fuel_str = vehicle.fuel_type.value if isinstance(vehicle.fuel_type, FuelType) else str(vehicle.fuel_type)
+
+            sentiment_mult, sentiment_breakdown = calculate_market_sentiment_multiplier(
+                vehicle.make, vehicle.model, fuel_str, vehicle.year
+            )
+
+            market_sentiment_multiplier = sentiment_mult
+
+            self.recommendations.append(f"📊 Market Sentiment: {sentiment_breakdown['notes']}")
+            self.recommendations.append(f"   Fuel type: {sentiment_breakdown['fuel_type']['reason']}")
+            self.recommendations.append(f"   Segment: {sentiment_breakdown['segment']['reason']}")
+
+            # Brand resale value
+            brand_mult, brand_reason = get_brand_resale_multiplier(vehicle.make)
+            market_sentiment_multiplier *= brand_mult
+            self.recommendations.append(f"   Brand: {brand_reason}")
+
+        final_fmv = value_after_location * market_sentiment_multiplier
+
+        # 9. Calculate all transaction context prices
         transaction_prices = self.calculate_transaction_prices(final_fmv)
 
         # 9. Calculate procurement price range (C2B with buffer)
