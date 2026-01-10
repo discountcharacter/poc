@@ -195,7 +195,7 @@ class OBVHyderabadEngine:
     # Segmented depreciation rates (calibrated to match OBV)
     # These rates are MORE CONSERVATIVE than IRDAI to match market reality
     DEPRECIATION_RATES = {
-        'year_0_1': 0.11,    # 11% for first year (premium new car drop)
+        'year_0_1': 0.15,    # 15% for first year ("drove off lot" effect - steeper for brand new)
         'year_1_3': 0.07,    # 7% per year for years 1-3 (moderate decline)
         'year_3_5': 0.06,    # 6% per year for years 3-5 (slower decline)
         'year_5_7': 0.05,    # 5% per year for years 5-7 (plateau)
@@ -345,6 +345,7 @@ class OBVHyderabadEngine:
                 'venue': 1200000, 'sonet': 900000, 'nexon': 900000, 'punch': 700000,
                 'brezza': 1100000, 'vitara brezza': 1100000, 'ecosport': 1100000,
                 'magnite': 700000, 'kiger': 700000,
+                'xuv 3xo': 900000, 'xuv300': 950000, 'xuv3xo': 900000,  # Mahindra compact SUVs
 
                 # Mid-size sedans
                 'city': 1200000, 'verna': 1200000, 'ciaz': 1000000,
