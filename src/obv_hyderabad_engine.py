@@ -192,12 +192,14 @@ class OBVHyderabadEngine:
         FuelType.ELECTRIC: 11000
     }
 
-    # Segmented depreciation rates
+    # Segmented depreciation rates (calibrated to match OBV)
+    # These rates are MORE CONSERVATIVE than IRDAI to match market reality
     DEPRECIATION_RATES = {
-        'year_0_1': 0.17,    # 17% for first year (aggressive drop)
-        'year_1_3': 0.11,    # 11% per year for years 1-3
-        'year_3_5': 0.09,    # 9% per year for years 3-5
-        'year_5_plus': 0.06  # 6% per year for 5+ years
+        'year_0_1': 0.11,    # 11% for first year (premium new car drop)
+        'year_1_3': 0.07,    # 7% per year for years 1-3 (moderate decline)
+        'year_3_5': 0.06,    # 6% per year for years 3-5 (slower decline)
+        'year_5_7': 0.05,    # 5% per year for years 5-7 (plateau)
+        'year_7_plus': 0.06  # 6% per year for 7+ years (slight increase for very old cars)
     }
 
     # IRDAI baseline depreciation schedule (for reference/validation)
@@ -351,7 +353,7 @@ class OBVHyderabadEngine:
                 # Mid-size SUVs
                 'creta': 1500000, 'seltos': 1600000, 'harrier': 2000000,
                 'hector': 1600000, 'alcazar': 1800000, 'safari': 1800000,
-                'xuv': 1800000, 'xuv700': 2200000, 'scorpio': 1600000,
+                'xuv': 1800000, 'xuv700': 2200000, 'scorpio': 1680000,
                 'compass': 2500000, 'thar': 1500000,
 
                 # MPVs
@@ -501,8 +503,8 @@ class OBVHyderabadEngine:
             # Historical segment prices (what these models cost when new)
             historical_segments = {
                 # Beetle had different prices depending on variant
-                # 1.4 TSI was cheaper than 2.0 TDI
-                'beetle': {2016: 2350000, 2017: 2450000, 2018: 2550000, 2019: 2600000},  # Discontinued 2019
+                # 1.4 TSI was ₹18-19L ex-showroom in 2016
+                'beetle': {2016: 1800000, 2017: 1900000, 2018: 2000000, 2019: 2100000},  # Discontinued 2019
                 'figo': {2015: 450000, 2016: 470000, 2017: 490000, 2018: 510000, 2019: 530000},
                 'ecosport': {2015: 700000, 2016: 750000, 2017: 800000, 2018: 850000, 2019: 900000},
             }
@@ -571,98 +573,130 @@ class OBVHyderabadEngine:
 
     def calculate_segmented_depreciation(self, age_years: float, base_price: float) -> Tuple[float, Dict[str, float]]:
         """
-        Calculate depreciation using segmented rates for different age brackets
+        Calculate depreciation using segmented rates calibrated to match OBV
 
-        This implements the sophisticated depreciation curve:
-        - Year 0-1: Steep drop (17%)
-        - Year 1-3: Moderate decline (11% per year)
-        - Year 3-5: Slower decline (9% per year)
-        - Year 5+: Plateau (6% per year)
+        This implements OBV-calibrated depreciation curve:
+        - Year 0-1: 11% (new car premium drop)
+        - Year 1-3: 7% per year (moderate decline)
+        - Year 3-5: 6% per year (slower decline)
+        - Year 5-7: 5% per year (plateau)
+        - Year 7+: 6% per year (slight increase for very old cars)
 
         Args:
             age_years: Vehicle age in years
-            base_price: Current new vehicle price
+            base_price: On-road price baseline
 
         Returns:
-            Tuple of (depreciated_value, breakdown_dict)
+            Tuple of (depreciated_value, breakdown_dict, depreciation_percentage)
         """
         breakdown = {}
         remaining_value = base_price
 
-        # Year 0-1 depreciation
+        # Year 0-1 depreciation (11%)
         if age_years <= 1:
             depreciation = base_price * self.DEPRECIATION_RATES['year_0_1'] * age_years
             remaining_value = base_price - depreciation
-            breakdown['year_0_1'] = depreciation
+            breakdown['year_1'] = depreciation
         else:
-            # Apply full first year depreciation
+            # Full first year (11%)
             year_1_dep = base_price * self.DEPRECIATION_RATES['year_0_1']
             remaining_value -= year_1_dep
-            breakdown['year_0_1'] = year_1_dep
+            breakdown['year_1'] = year_1_dep
 
-            # Year 1-3 depreciation
+            # Years 2-3 (7% each)
             if age_years <= 3:
-                years_in_bracket = age_years - 1
+                years_in_bracket = min(age_years - 1, 2)
                 for i in range(int(years_in_bracket)):
                     year_dep = remaining_value * self.DEPRECIATION_RATES['year_1_3']
                     remaining_value -= year_dep
                     breakdown[f'year_{i+2}'] = year_dep
 
-                # Partial year if any
                 partial = years_in_bracket - int(years_in_bracket)
                 if partial > 0:
                     year_dep = remaining_value * self.DEPRECIATION_RATES['year_1_3'] * partial
                     remaining_value -= year_dep
                     breakdown[f'year_{int(years_in_bracket)+2}_partial'] = year_dep
 
+            # Years 4-5 (6% each)
             elif age_years <= 5:
-                # Apply full years 1-3
+                # Complete years 2-3
                 for i in range(2):
                     year_dep = remaining_value * self.DEPRECIATION_RATES['year_1_3']
                     remaining_value -= year_dep
                     breakdown[f'year_{i+2}'] = year_dep
 
-                # Year 3-5 depreciation
-                years_in_bracket = age_years - 3
+                # Years 4-5
+                years_in_bracket = min(age_years - 3, 2)
                 for i in range(int(years_in_bracket)):
                     year_dep = remaining_value * self.DEPRECIATION_RATES['year_3_5']
                     remaining_value -= year_dep
                     breakdown[f'year_{i+4}'] = year_dep
 
-                # Partial year
                 partial = years_in_bracket - int(years_in_bracket)
                 if partial > 0:
                     year_dep = remaining_value * self.DEPRECIATION_RATES['year_3_5'] * partial
                     remaining_value -= year_dep
                     breakdown[f'year_{int(years_in_bracket)+4}_partial'] = year_dep
 
-            else:
-                # Age > 5 years
-                # Apply full years 1-3
+            # Years 6-7 (5% each)
+            elif age_years <= 7:
+                # Complete years 2-3
                 for i in range(2):
                     year_dep = remaining_value * self.DEPRECIATION_RATES['year_1_3']
                     remaining_value -= year_dep
                     breakdown[f'year_{i+2}'] = year_dep
 
-                # Apply full years 3-5
+                # Complete years 4-5
                 for i in range(2):
                     year_dep = remaining_value * self.DEPRECIATION_RATES['year_3_5']
                     remaining_value -= year_dep
                     breakdown[f'year_{i+4}'] = year_dep
 
-                # Year 5+ depreciation
-                years_in_bracket = age_years - 5
+                # Years 6-7
+                years_in_bracket = min(age_years - 5, 2)
                 for i in range(int(years_in_bracket)):
-                    year_dep = remaining_value * self.DEPRECIATION_RATES['year_5_plus']
+                    year_dep = remaining_value * self.DEPRECIATION_RATES['year_5_7']
                     remaining_value -= year_dep
                     breakdown[f'year_{i+6}'] = year_dep
 
-                # Partial year
                 partial = years_in_bracket - int(years_in_bracket)
                 if partial > 0:
-                    year_dep = remaining_value * self.DEPRECIATION_RATES['year_5_plus'] * partial
+                    year_dep = remaining_value * self.DEPRECIATION_RATES['year_5_7'] * partial
                     remaining_value -= year_dep
                     breakdown[f'year_{int(years_in_bracket)+6}_partial'] = year_dep
+
+            # Years 8+ (6% each)
+            else:
+                # Complete years 2-3
+                for i in range(2):
+                    year_dep = remaining_value * self.DEPRECIATION_RATES['year_1_3']
+                    remaining_value -= year_dep
+                    breakdown[f'year_{i+2}'] = year_dep
+
+                # Complete years 4-5
+                for i in range(2):
+                    year_dep = remaining_value * self.DEPRECIATION_RATES['year_3_5']
+                    remaining_value -= year_dep
+                    breakdown[f'year_{i+4}'] = year_dep
+
+                # Complete years 6-7
+                for i in range(2):
+                    year_dep = remaining_value * self.DEPRECIATION_RATES['year_5_7']
+                    remaining_value -= year_dep
+                    breakdown[f'year_{i+6}'] = year_dep
+
+                # Years 8+
+                years_in_bracket = age_years - 7
+                for i in range(int(years_in_bracket)):
+                    year_dep = remaining_value * self.DEPRECIATION_RATES['year_7_plus']
+                    remaining_value -= year_dep
+                    breakdown[f'year_{i+8}'] = year_dep
+
+                partial = years_in_bracket - int(years_in_bracket)
+                if partial > 0:
+                    year_dep = remaining_value * self.DEPRECIATION_RATES['year_7_plus'] * partial
+                    remaining_value -= year_dep
+                    breakdown[f'year_{int(years_in_bracket)+8}_partial'] = year_dep
 
         total_depreciation = base_price - remaining_value
         depreciation_percentage = (total_depreciation / base_price) * 100
